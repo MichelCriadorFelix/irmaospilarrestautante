@@ -4,14 +4,80 @@ import { db } from '../lib/firebase';
 import { Product } from '../types';
 import { useCart } from '../context/CartContext';
 import { formatCurrency } from '../lib/utils';
-import { Plus } from 'lucide-react';
+import { Plus, Check, X, ShoppingBag, HelpCircle, AlertCircle } from 'lucide-react';
 import { initialMenu } from '../lib/seedData';
 import { useAuth } from '../context/AuthContext';
+import { AnimatePresence, motion } from 'framer-motion';
 
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
+  const { addItem } = useCart();
+
+  const [pendingAdd, setPendingAdd] = useState<{
+    product: Product;
+    selectedOption?: string;
+    selectedSize?: string;
+    totalPrice: number;
+  } | null>(null);
+
+  const [alert, setAlert] = useState<{
+    type: 'success' | 'cancel' | 'warning';
+    message: string;
+    submessage?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (alert) {
+      const timer = setTimeout(() => {
+        setAlert(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [alert]);
+
+  const handleAddAttempt = (
+    product: Product, 
+    selectedOption?: string, 
+    selectedSize?: string, 
+    totalPrice?: number
+  ) => {
+    setPendingAdd({
+      product,
+      selectedOption,
+      selectedSize,
+      totalPrice: totalPrice ?? product.price
+    });
+  };
+
+  const handleConfirmAdd = () => {
+    if (!pendingAdd) return;
+    addItem({
+      product: pendingAdd.product,
+      quantity: 1,
+      selectedOption: pendingAdd.selectedOption,
+      selectedSize: pendingAdd.selectedSize,
+      totalPrice: pendingAdd.totalPrice
+    });
+
+    setAlert({
+      type: 'success',
+      message: 'Item adicionado!',
+      submessage: `${pendingAdd.product.name} está no seu carrinho.`
+    });
+    setPendingAdd(null);
+  };
+
+  const handleCancelAdd = () => {
+    if (!pendingAdd) return;
+    setAlert({
+      type: 'cancel',
+      message: 'Adição cancelada',
+      submessage: `${pendingAdd.product.name} não foi adicionado.`
+    });
+    setPendingAdd(null);
+  };
 
   const fetchProducts = async () => {
     const querySnapshot = await getDocs(collection(db, 'products'));
@@ -26,7 +92,11 @@ export default function Home() {
 
   const handleAutoSeed = async () => {
     if (!user) {
-      alert("Faça login como Admin de Teste para carregar o cardápio padrão!");
+      setAlert({
+        type: 'warning',
+        message: 'Acesso Restrito',
+        submessage: 'Faça login como Admin de Teste para carregar o cardápio padrão!'
+      });
       return;
     }
     setLoading(true);
@@ -65,25 +135,165 @@ export default function Home() {
           <h2 className="text-sm font-black text-gray-900 mb-4 uppercase tracking-widest">Refeições</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
             {meals.map(product => (
-              <ProductCard key={product.id} product={product} />
+              <ProductCard 
+                key={product.id} 
+                product={product} 
+                onAddAttempt={(details) => handleAddAttempt(product, details.selectedOption, details.selectedSize, details.totalPrice)}
+              />
             ))}
           </div>
 
           <h2 className="text-sm font-black text-gray-900 mb-4 uppercase tracking-widest">Bebidas</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {drinks.map(product => (
-              <ProductCard key={product.id} product={product} />
+              <ProductCard 
+                key={product.id} 
+                product={product} 
+                onAddAttempt={(details) => handleAddAttempt(product, details.selectedOption, details.selectedSize, details.totalPrice)}
+              />
             ))}
           </div>
         </>
       )}
+
+      {/* Friendly Popup Modal */}
+      <AnimatePresence>
+        {pendingAdd && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+            onClick={handleCancelAdd}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 15, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.95, y: 15, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full overflow-hidden border border-gray-100"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex flex-col items-center text-center">
+                <div className="w-12 h-12 rounded-full bg-brand/10 text-brand flex items-center justify-center mb-4">
+                  <ShoppingBag size={24} className="stroke-[2.5]" />
+                </div>
+                
+                <h3 className="text-sm font-black text-gray-900 uppercase tracking-wider mb-2">
+                  Confirmar Adição?
+                </h3>
+                
+                <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mb-4">
+                  Deseja adicionar este item ao seu carrinho de compras?
+                </p>
+
+                <div className="w-full bg-gray-50 rounded-xl border border-gray-100 p-4 mb-6 text-left">
+                  <h4 className="text-xs font-black text-gray-900 mb-1">
+                    {pendingAdd.product.name}
+                  </h4>
+                  {pendingAdd.product.description && (
+                    <p className="text-[10px] text-gray-500 leading-tight mb-3 font-medium">
+                      {pendingAdd.product.description}
+                    </p>
+                  )}
+                  
+                  <div className="space-y-1.5 border-t border-gray-100 pt-3 text-[10px] uppercase tracking-wider font-bold text-gray-600">
+                    {pendingAdd.selectedOption && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Opção:</span>
+                        <span className="text-gray-800">{pendingAdd.selectedOption}</span>
+                      </div>
+                    )}
+                    {pendingAdd.selectedSize && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Tamanho:</span>
+                        <span className="text-gray-800">{pendingAdd.selectedSize}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-xs font-black pt-1.5 border-t border-dashed border-gray-200 mt-1.5">
+                      <span className="text-gray-900">Preço Total:</span>
+                      <span className="text-brand">{formatCurrency(pendingAdd.totalPrice)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 w-full">
+                  <button
+                    onClick={handleCancelAdd}
+                    className="py-2.5 px-4 border border-gray-200 bg-white hover:bg-gray-50 text-xs font-bold text-gray-600 uppercase tracking-widest rounded-xl transition-all cursor-pointer active:scale-98"
+                  >
+                    Não, Cancelar
+                  </button>
+                  <button
+                    onClick={handleConfirmAdd}
+                    className="py-2.5 px-4 bg-brand hover:bg-brand-dark text-white text-xs font-bold uppercase tracking-widest rounded-xl shadow-md shadow-brand/20 transition-all cursor-pointer active:scale-98"
+                  >
+                    Sim, Adicionar
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating Animated Toast Alert */}
+      <AnimatePresence>
+        {alert && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, scale: 1, x: '-50%' }}
+            exit={{ opacity: 0, y: 20, scale: 0.9, x: '-50%' }}
+            className="fixed bottom-6 left-1/2 z-50 w-full max-w-xs px-4"
+          >
+            <div className={`rounded-xl shadow-xl border p-4 flex items-center gap-3 ${
+              alert.type === 'success' 
+                ? "bg-emerald-50 border-emerald-200 text-emerald-800" 
+                : alert.type === 'warning'
+                ? "bg-amber-50 border-amber-200 text-amber-800"
+                : "bg-gray-800 border-gray-700 text-white"
+            }`}>
+              {alert.type === 'success' ? (
+                <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center shrink-0 text-white shadow-sm shadow-emerald-500/20">
+                  <Check size={18} className="stroke-[3]" />
+                </div>
+              ) : alert.type === 'warning' ? (
+                <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center shrink-0 text-white shadow-sm shadow-amber-500/20">
+                  <AlertCircle size={18} className="stroke-[3]" />
+                </div>
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center shrink-0 text-white">
+                  <X size={18} className="stroke-[3]" />
+                </div>
+              )}
+              <div className="flex-1">
+                <p className="text-xs font-black uppercase tracking-wider leading-tight">
+                  {alert.message}
+                </p>
+                {alert.submessage && (
+                  <p className="text-[10px] opacity-90 mt-0.5 leading-none font-medium">
+                    {alert.submessage}
+                  </p>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-function ProductCard({ product }: { product: Product }) {
-  const { addItem } = useCart();
-  const [selectedOption, setSelectedOption] = useState<string>(product.options?.[0] || '');
+function ProductCard({ 
+  product, 
+  onAddAttempt 
+}: { 
+  product: Product; 
+  onAddAttempt: (details: { selectedOption?: string; selectedSize?: string; totalPrice: number }) => void; 
+}) {
+  const [selectedOption, setSelectedOption] = useState<string>(
+    product.options && product.options.length > 0 ? 'Nenhum' : ''
+  );
   const [selectedSize, setSelectedSize] = useState<'1 pedaço' | '2 pedaços'>('1 pedaço');
 
   const handleAdd = () => {
@@ -92,9 +302,7 @@ function ProductCard({ product }: { product: Product }) {
       finalPrice = product.priceOption2;
     }
     
-    addItem({
-      product,
-      quantity: 1,
+    onAddAttempt({
       selectedOption: product.category === 'refeicao' ? selectedOption : undefined,
       selectedSize: product.category === 'refeicao' ? selectedSize : undefined,
       totalPrice: finalPrice
@@ -129,6 +337,7 @@ function ProductCard({ product }: { product: Product }) {
                   value={selectedOption}
                   onChange={e => setSelectedOption(e.target.value)}
                 >
+                  <option value="Nenhum">Nenhum</option>
                   {product.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                 </select>
               </div>

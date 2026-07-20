@@ -7,8 +7,9 @@ import { Order, ChatMessage } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { formatCurrency } from '../lib/utils';
 import { format } from 'date-fns';
-import { Send, Upload, Copy, Check, CreditCard, ChefHat, Truck, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Send, Upload, Copy, Check, CreditCard, ChefHat, Truck, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react';
 import { playNotificationSound } from '../lib/audio';
+import { AnimatePresence, motion } from 'framer-motion';
 
 const statusMap = {
   pending_payment: 'Aguardando Pagamento',
@@ -48,6 +49,7 @@ export default function OrderDetails() {
   const [order, setOrder] = useState<Order | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
+  const [selectedImage, setSelectedImage] = useState<{ file: File; previewUrl: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -60,6 +62,21 @@ export default function OrderDetails() {
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [alert, setAlert] = useState<{
+    type: 'success' | 'error' | 'warning';
+    message: string;
+    submessage?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (alert) {
+      const timer = setTimeout(() => {
+        setAlert(null);
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [alert]);
 
   useEffect(() => {
     // Escuta os dados da empresa do Firestore
@@ -116,77 +133,128 @@ export default function OrderDetails() {
     };
   }, [id, user?.uid]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !user || !id) return;
-    
-    await addDoc(collection(db, 'orders', id, 'messages'), {
-      senderId: user.uid,
-      senderName: user.name,
-      text: newMessage,
-      createdAt: Date.now()
+  // Helper to compress images on the client side before upload (prevents huge documents & F12 / quota errors)
+  const compressImage = (file: File, maxWidth = 800, maxHeight = 800, quality = 0.7): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(event.target?.result as string);
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', quality);
+          resolve(dataUrl);
+        };
+        img.onerror = (err) => reject(err);
+      };
+      reader.onerror = (err) => reject(err);
     });
-    setNewMessage('');
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !id || !user) return;
-
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim() && !selectedImage) return;
+    if (!user || !id) return;
+    
     setUploading(true);
     try {
-      // 1. Try Firebase Storage upload
-      const fileRef = ref(storage, `orders/${id}/receipts/${Date.now()}_${file.name}`);
-      const uploadResult = await uploadBytes(fileRef, file);
-      const downloadUrl = await getDownloadURL(uploadResult.ref);
+      let imageUrl = '';
+      
+      if (selectedImage) {
+        try {
+          const compressedBase64 = await compressImage(selectedImage.file);
+          
+          try {
+            // Tentativa de upload para o Storage
+            const fileRef = ref(storage, `orders/${id}/receipts/${Date.now()}_${selectedImage.file.name}`);
+            const res = await fetch(compressedBase64);
+            const blob = await res.blob();
+            const uploadResult = await uploadBytes(fileRef, blob);
+            imageUrl = await getDownloadURL(uploadResult.ref);
+          } catch (storageErr) {
+            console.warn('Error uploading to Firebase Storage, fallback to compressed Base64', storageErr);
+            imageUrl = compressedBase64;
+          }
+        } catch (compErr) {
+          console.error('Error compressing image:', compErr);
+          setAlert({
+            type: 'error',
+            message: 'Erro ao processar imagem',
+            submessage: 'Não foi possível otimizar o arquivo.'
+          });
+          setUploading(false);
+          return;
+        }
+      }
+
+      const textToSend = newMessage.trim();
 
       await addDoc(collection(db, 'orders', id, 'messages'), {
         senderId: user.uid,
         senderName: user.name,
-        text: 'Envio de comprovante/imagem',
-        imageUrl: downloadUrl,
+        text: textToSend || 'Envio de comprovante/imagem',
+        ...(imageUrl ? { imageUrl } : {}),
         createdAt: Date.now()
       });
 
-      if (order?.status === 'pending_payment') {
+      if (imageUrl && order?.status === 'pending_payment') {
         await updateDoc(doc(db, 'orders', id), {
-          receiptUrl: downloadUrl
+          receiptUrl: imageUrl
         });
       }
+
+      setNewMessage('');
+      if (selectedImage) {
+        URL.revokeObjectURL(selectedImage.previewUrl);
+        setSelectedImage(null);
+      }
     } catch (err) {
-      console.warn('Error uploading to Firebase Storage, attempting Base64 fallback...', err);
-      // Fallback to reading file as base64 and saving to Firestore (100% reliable)
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64Url = reader.result as string;
-        if (base64Url.length > 800000) {
-          alert('A imagem é muito grande. Por favor, envie uma foto menor ou compactada.');
-          return;
-        }
-        try {
-          await addDoc(collection(db, 'orders', id, 'messages'), {
-            senderId: user.uid,
-            senderName: user.name,
-            text: 'Envio de comprovante/imagem',
-            imageUrl: base64Url,
-            createdAt: Date.now()
-          });
-          if (order?.status === 'pending_payment') {
-            await updateDoc(doc(db, 'orders', id), {
-              receiptUrl: base64Url
-            });
-          }
-        } catch (dbErr) {
-          console.error('Error saving base64 message:', dbErr);
-          alert('Erro ao enviar imagem.');
-        }
-      };
-      reader.readAsDataURL(file);
+      console.error('Error sending message:', err);
+      setAlert({
+        type: 'error',
+        message: 'Erro ao enviar',
+        submessage: 'Houve uma falha ao enviar sua mensagem.'
+      });
     } finally {
       setUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+    }
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !id || !user) return;
+
+    // Instant local preview
+    const previewUrl = URL.createObjectURL(file);
+    setSelectedImage({ file, previewUrl });
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -529,39 +597,71 @@ export default function OrderDetails() {
           <div ref={messagesEndRef} />
         </div>
 
-        <form onSubmit={handleSendMessage} className="p-3 border-t bg-white rounded-b-xl flex items-center space-x-2">
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleImageUpload} 
-            accept="image/*" 
-            className="hidden" 
-          />
-          <button 
-            type="button" 
-            disabled={uploading}
-            onClick={() => fileInputRef.current?.click()}
-            className="p-2 text-brand hover:text-brand-dark disabled:opacity-50 transition-colors"
-            title="Enviar comprovante ou foto"
-          >
-            {uploading ? (
-              <div className="w-5 h-5 border-2 border-brand border-t-transparent rounded-full animate-spin" />
-            ) : (
+        <div className="p-3 border-t bg-white rounded-b-xl space-y-2">
+          {/* Selected Image Preview with cancel button */}
+          {selectedImage && (
+            <div className="flex items-center justify-between bg-gray-50 border border-gray-100 p-2 rounded-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-md overflow-hidden bg-gray-200 relative shrink-0">
+                  <img src={selectedImage.previewUrl} alt="Preview do anexo" className="w-full h-full object-cover" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-gray-700 truncate max-w-[150px]">{selectedImage.file.name}</p>
+                  <p className="text-[10px] text-gray-400 uppercase font-black tracking-wider">Pronto para enviar</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  URL.revokeObjectURL(selectedImage.previewUrl);
+                  setSelectedImage(null);
+                }}
+                className="p-1.5 hover:bg-gray-200 text-gray-500 hover:text-red-600 rounded-md transition-all active:scale-95"
+                title="Remover imagem"
+              >
+                <XCircle size={18} />
+              </button>
+            </div>
+          )}
+
+          <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleImageSelect} 
+              accept="image/*" 
+              className="hidden" 
+            />
+            <button 
+              type="button" 
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
+              className="p-2 text-brand hover:text-brand-dark disabled:opacity-50 transition-colors shrink-0"
+              title="Anexar comprovante ou foto"
+            >
               <Upload size={20} />
-            )}
-          </button>
-          <input
-            type="text"
-            value={newMessage}
-            disabled={uploading}
-            onChange={e => setNewMessage(e.target.value)}
-            placeholder={uploading ? "Aguarde o envio..." : "Digite uma mensagem..."}
-            className="flex-1 border border-gray-200 focus:border-brand focus:ring-brand bg-gray-50 rounded-lg px-3 py-2 text-sm"
-          />
-          <button type="submit" disabled={!newMessage.trim() || uploading} className="p-2 bg-brand text-white rounded-lg hover:bg-brand-dark disabled:opacity-50 transition-colors shadow-sm">
-            <Send size={18} />
-          </button>
-        </form>
+            </button>
+            <input
+              type="text"
+              value={newMessage}
+              disabled={uploading}
+              onChange={e => setNewMessage(e.target.value)}
+              placeholder={uploading ? "Aguarde o envio..." : "Digite uma mensagem..."}
+              className="flex-1 border border-gray-200 focus:border-brand focus:ring-brand bg-gray-50 rounded-lg px-3 py-2 text-sm"
+            />
+            <button 
+              type="submit" 
+              disabled={(!newMessage.trim() && !selectedImage) || uploading} 
+              className="p-2 bg-brand text-white rounded-lg hover:bg-brand-dark disabled:opacity-50 transition-colors shadow-sm shrink-0 flex items-center justify-center"
+            >
+              {uploading ? (
+                <div className="w-5 h-5 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Send size={18} />
+              )}
+            </button>
+          </form>
+        </div>
       </div>
 
       {/* Fullscreen Image Preview Modal */}
@@ -583,6 +683,50 @@ export default function OrderDetails() {
           </div>
         </div>
       )}
+
+      {/* Floating Animated Toast Alert */}
+      <AnimatePresence>
+        {alert && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, scale: 1, x: '-50%' }}
+            exit={{ opacity: 0, y: 20, scale: 0.9, x: '-50%' }}
+            className="fixed bottom-6 left-1/2 z-50 w-full max-w-xs px-4"
+          >
+            <div className={`rounded-xl shadow-xl border p-4 flex items-center gap-3 ${
+              alert.type === 'success' 
+                ? "bg-emerald-50 border-emerald-200 text-emerald-800" 
+                : alert.type === 'warning'
+                ? "bg-amber-50 border-amber-200 text-amber-800"
+                : "bg-rose-50 border-rose-200 text-rose-800"
+            }`}>
+              {alert.type === 'success' ? (
+                <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center shrink-0 text-white shadow-sm shadow-emerald-500/20">
+                  <Check size={18} className="stroke-[3]" />
+                </div>
+              ) : alert.type === 'warning' ? (
+                <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center shrink-0 text-white shadow-sm shadow-amber-500/20">
+                  <AlertCircle size={18} className="stroke-[3]" />
+                </div>
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-rose-500 flex items-center justify-center shrink-0 text-white shadow-sm shadow-rose-500/20">
+                  <XCircle size={18} className="stroke-[3]" />
+                </div>
+              )}
+              <div className="flex-1">
+                <p className="text-xs font-black uppercase tracking-wider leading-tight">
+                  {alert.message}
+                </p>
+                {alert.submessage && (
+                  <p className="text-[10px] opacity-90 mt-0.5 leading-none font-medium">
+                    {alert.submessage}
+                  </p>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

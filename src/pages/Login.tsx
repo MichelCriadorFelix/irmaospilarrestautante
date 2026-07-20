@@ -19,10 +19,14 @@ export default function Login() {
       await loginWithSocial(provider);
       const stored = localStorage.getItem('mockUser');
       if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.role === 'admin') {
-          navigate('/admin');
-          return;
+        try {
+          const parsed = JSON.parse(stored);
+          if (parsed.role === 'admin') {
+            navigate('/admin');
+            return;
+          }
+        } catch (parseErr) {
+          console.error('Error parsing stored user in social login:', parseErr);
         }
       }
       navigate('/');

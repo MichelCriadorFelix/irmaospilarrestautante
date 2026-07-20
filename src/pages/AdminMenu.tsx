@@ -3,8 +3,9 @@ import { collection, query, onSnapshot, doc, updateDoc, deleteDoc, setDoc, addDo
 import { db, sanitizeForFirestore } from '../lib/firebase';
 import { Product } from '../types';
 import { formatCurrency } from '../lib/utils';
-import { Edit, Trash2, Plus, X } from 'lucide-react';
+import { Edit, Trash2, Plus, X, Check, AlertTriangle, AlertCircle } from 'lucide-react';
 import { initialMenu } from '../lib/seedData';
+import { AnimatePresence, motion } from 'framer-motion';
 
 export default function AdminMenu() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -18,6 +19,22 @@ export default function AdminMenu() {
     available: true,
   });
 
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [alert, setAlert] = useState<{
+    type: 'success' | 'error' | 'info';
+    message: string;
+    submessage?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (alert) {
+      const timer = setTimeout(() => {
+        setAlert(null);
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [alert]);
+
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'products'), (snapshot) => {
       setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
@@ -26,20 +43,63 @@ export default function AdminMenu() {
   }, []);
 
   const handleToggleAvailable = async (product: Product) => {
-    await updateDoc(doc(db, 'products', product.id), { available: !product.available });
+    try {
+      await updateDoc(doc(db, 'products', product.id), { available: !product.available });
+      setAlert({
+        type: 'success',
+        message: 'Status Atualizado!',
+        submessage: `O item "${product.name}" agora está ${!product.available ? 'Disponível' : 'Indisponível'}.`
+      });
+    } catch (err) {
+      setAlert({
+        type: 'error',
+        message: 'Erro ao atualizar',
+        submessage: 'Não foi possível alterar a disponibilidade.'
+      });
+    }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Tem certeza que deseja excluir?')) {
-      await deleteDoc(doc(db, 'products', id));
+  const handleDeleteAttempt = (product: Product) => {
+    setProductToDelete(product);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!productToDelete) return;
+    try {
+      await deleteDoc(doc(db, 'products', productToDelete.id));
+      setAlert({
+        type: 'success',
+        message: 'Item Excluído!',
+        submessage: `O item "${productToDelete.name}" foi removido com sucesso.`
+      });
+    } catch (err) {
+      setAlert({
+        type: 'error',
+        message: 'Erro ao excluir',
+        submessage: 'Não foi possível remover o item do cardápio.'
+      });
+    } finally {
+      setProductToDelete(null);
     }
   };
 
   const seedMenu = async () => {
-    for (const item of initialMenu) {
-      await setDoc(doc(collection(db, 'products')), item);
+    try {
+      for (const item of initialMenu) {
+        await setDoc(doc(collection(db, 'products')), item);
+      }
+      setAlert({
+        type: 'success',
+        message: 'Cardápio Inicial Carregado!',
+        submessage: `${initialMenu.length} itens padrões foram criados.`
+      });
+    } catch (err) {
+      setAlert({
+        type: 'error',
+        message: 'Erro ao carregar',
+        submessage: 'Houve uma falha ao alimentar o cardápio.'
+      });
     }
-    alert('Cardápio inicial carregado com sucesso!');
   };
 
   const handleEdit = (product: Product) => {
@@ -65,13 +125,31 @@ export default function AdminMenu() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const sanitizedData = sanitizeForFirestore(formData);
-    if (editingId) {
-      await updateDoc(doc(db, 'products', editingId), sanitizedData as any);
-    } else {
-      await addDoc(collection(db, 'products'), sanitizedData as any);
+    try {
+      if (editingId) {
+        await updateDoc(doc(db, 'products', editingId), sanitizedData as any);
+        setAlert({
+          type: 'success',
+          message: 'Item Atualizado!',
+          submessage: `As alterações em "${formData.name}" foram salvas.`
+        });
+      } else {
+        await addDoc(collection(db, 'products'), sanitizedData as any);
+        setAlert({
+          type: 'success',
+          message: 'Item Criado!',
+          submessage: `"${formData.name}" foi adicionado com sucesso.`
+        });
+      }
+      setIsFormOpen(false);
+      setEditingId(null);
+    } catch (err) {
+      setAlert({
+        type: 'error',
+        message: 'Erro ao salvar',
+        submessage: 'Houve um erro técnico. Tente novamente.'
+      });
     }
-    setIsFormOpen(false);
-    setEditingId(null);
   };
 
   return (
@@ -177,7 +255,7 @@ export default function AdminMenu() {
                   <button onClick={() => handleEdit(product)} className="text-gray-400 hover:text-brand inline-flex p-1.5 rounded-md hover:bg-brand/10 transition-colors">
                     <Edit size={16} />
                   </button>
-                  <button onClick={() => handleDelete(product.id)} className="text-gray-400 hover:text-red-600 inline-flex p-1.5 rounded-md hover:bg-red-50 transition-colors">
+                  <button onClick={() => handleDeleteAttempt(product)} className="text-gray-400 hover:text-red-600 inline-flex p-1.5 rounded-md hover:bg-red-50 transition-colors">
                     <Trash2 size={16} />
                   </button>
                 </td>
@@ -186,6 +264,112 @@ export default function AdminMenu() {
           </tbody>
         </table>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {productToDelete && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+            onClick={() => setProductToDelete(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 15, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.95, y: 15, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full border border-gray-100"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex flex-col items-center text-center">
+                <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mb-4">
+                  <AlertTriangle size={24} className="stroke-[2.5]" />
+                </div>
+                
+                <h3 className="text-sm font-black text-gray-900 uppercase tracking-wider mb-2">
+                  Excluir Item?
+                </h3>
+                
+                <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mb-4">
+                  Tem certeza que deseja remover este item permanentemente do cardápio?
+                </p>
+
+                <div className="w-full bg-red-50/50 rounded-xl border border-red-100/50 p-4 mb-6 text-left">
+                  <h4 className="text-xs font-black text-red-950">
+                    {productToDelete.name}
+                  </h4>
+                  <p className="text-[10px] text-red-800 font-bold uppercase tracking-wider mt-1">
+                    Categoria: {productToDelete.category === 'refeicao' ? 'Refeição' : 'Bebida'}
+                  </p>
+                  <p className="text-[10px] text-red-900 font-black mt-0.5">
+                    Preço: {formatCurrency(productToDelete.price)}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 w-full">
+                  <button
+                    onClick={() => setProductToDelete(null)}
+                    className="py-2.5 px-4 border border-gray-200 bg-white hover:bg-gray-50 text-xs font-bold text-gray-600 uppercase tracking-widest rounded-xl transition-all cursor-pointer active:scale-98"
+                  >
+                    Não, Cancelar
+                  </button>
+                  <button
+                    onClick={handleConfirmDelete}
+                    className="py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-widest rounded-xl shadow-md shadow-red-600/20 transition-all cursor-pointer active:scale-98"
+                  >
+                    Sim, Excluir
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating Animated Toast Alert */}
+      <AnimatePresence>
+        {alert && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, scale: 1, x: '-50%' }}
+            exit={{ opacity: 0, y: 20, scale: 0.9, x: '-50%' }}
+            className="fixed bottom-6 left-1/2 z-50 w-full max-w-xs px-4"
+          >
+            <div className={`rounded-xl shadow-xl border p-4 flex items-center gap-3 ${
+              alert.type === 'success' 
+                ? "bg-emerald-50 border-emerald-200 text-emerald-800" 
+                : alert.type === 'error'
+                ? "bg-rose-50 border-rose-200 text-rose-800"
+                : "bg-gray-800 border-gray-700 text-white"
+            }`}>
+              {alert.type === 'success' ? (
+                <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center shrink-0 text-white shadow-sm shadow-emerald-500/20">
+                  <Check size={18} className="stroke-[3]" />
+                </div>
+              ) : alert.type === 'error' ? (
+                <div className="w-8 h-8 rounded-full bg-rose-500 flex items-center justify-center shrink-0 text-white shadow-sm shadow-rose-500/20">
+                  <AlertCircle size={18} className="stroke-[3]" />
+                </div>
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center shrink-0 text-white">
+                  <Check size={18} className="stroke-[3]" />
+                </div>
+              )}
+              <div className="flex-1">
+                <p className="text-xs font-black uppercase tracking-wider leading-tight">
+                  {alert.message}
+                </p>
+                {alert.submessage && (
+                  <p className="text-[10px] opacity-90 mt-0.5 leading-none font-medium">
+                    {alert.submessage}
+                  </p>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

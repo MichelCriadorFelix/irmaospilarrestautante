@@ -5,7 +5,8 @@ import { formatCurrency } from '../lib/utils';
 import { collection, addDoc } from 'firebase/firestore';
 import { db, sanitizeForFirestore } from '../lib/firebase';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, MapPin, Phone, User as UserIcon, Edit2, CreditCard, DollarSign, QrCode, MessageSquare } from 'lucide-react';
+import { Trash2, MapPin, Phone, User as UserIcon, Edit2, CreditCard, DollarSign, QrCode, MessageSquare, AlertCircle, Check, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 
 export default function Cart() {
   const { items, removeItem, total, clearCart } = useCart();
@@ -17,6 +18,21 @@ export default function Cart() {
   const [changeFor, setChangeFor] = useState('');
   const [notes, setNotes] = useState('');
   const navigate = useNavigate();
+
+  const [alertState, setAlertState] = useState<{
+    type: 'success' | 'error' | 'warning';
+    message: string;
+    submessage?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (alertState) {
+      const timer = setTimeout(() => {
+        setAlertState(null);
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [alertState]);
 
   const isProfileIncomplete = !user?.phone || !user?.address;
 
@@ -31,8 +47,14 @@ export default function Cart() {
     if (!user) return;
     if (items.length === 0) return;
     if (isProfileIncomplete) {
-      alert('Por favor, preencha seus dados de contato e endereço antes de finalizar.');
-      navigate('/profile');
+      setAlertState({
+        type: 'warning',
+        message: 'Dados Incompletos',
+        submessage: 'Preencha seus dados de contato e endereço antes de finalizar. Redirecionando...'
+      });
+      setTimeout(() => {
+        navigate('/profile');
+      }, 3000);
       return;
     }
 
@@ -42,7 +64,11 @@ export default function Cart() {
 
     if (paymentMethod === 'cash' && needChange === true) {
       if (!parsedChangeFor || parsedChangeFor <= total) {
-        alert('Por favor, informe um valor de troco válido e maior que o total do pedido.');
+        setAlertState({
+          type: 'error',
+          message: 'Troco Inválido',
+          submessage: 'Por favor, informe um valor de troco válido e maior que o total do pedido.'
+        });
         return;
       }
     }
@@ -71,7 +97,11 @@ export default function Cart() {
       navigate(`/orders/${orderRef.id}`);
     } catch (error) {
       console.error(error);
-      alert('Erro ao finalizar pedido.');
+      setAlertState({
+        type: 'error',
+        message: 'Erro ao criar pedido',
+        submessage: 'Ocorreu um erro ao finalizar seu pedido. Tente novamente.'
+      });
     } finally {
       setLoading(false);
     }
@@ -398,6 +428,50 @@ export default function Cart() {
           {loading ? 'Processando...' : 'Finalizar Pedido'}
         </button>
       </div>
+
+      {/* Floating Animated Toast Alert */}
+      <AnimatePresence>
+        {alertState && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, scale: 1, x: '-50%' }}
+            exit={{ opacity: 0, y: 20, scale: 0.9, x: '-50%' }}
+            className="fixed bottom-6 left-1/2 z-50 w-full max-w-xs px-4"
+          >
+            <div className={`rounded-xl shadow-xl border p-4 flex items-center gap-3 ${
+              alertState.type === 'success' 
+                ? "bg-emerald-50 border-emerald-200 text-emerald-800" 
+                : alertState.type === 'warning'
+                ? "bg-amber-50 border-amber-200 text-amber-800"
+                : "bg-rose-50 border-rose-200 text-rose-800"
+            }`}>
+              {alertState.type === 'success' ? (
+                <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center shrink-0 text-white shadow-sm shadow-emerald-500/20">
+                  <Check size={18} className="stroke-[3]" />
+                </div>
+              ) : alertState.type === 'warning' ? (
+                <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center shrink-0 text-white shadow-sm shadow-amber-500/20">
+                  <AlertCircle size={18} className="stroke-[3]" />
+                </div>
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-rose-500 flex items-center justify-center shrink-0 text-white shadow-sm shadow-rose-500/20">
+                  <X size={18} className="stroke-[3]" />
+                </div>
+              )}
+              <div className="flex-1">
+                <p className="text-xs font-black uppercase tracking-wider leading-tight">
+                  {alertState.message}
+                </p>
+                {alertState.submessage && (
+                  <p className="text-[10px] opacity-90 mt-0.5 leading-none font-medium">
+                    {alertState.submessage}
+                  </p>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

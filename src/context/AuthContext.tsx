@@ -36,20 +36,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const loadUser = async () => {
       const storedUser = localStorage.getItem('mockUser');
       if (storedUser) {
-        const parsedUser = JSON.parse(storedUser) as User;
-        setUser(parsedUser);
-
         try {
-          // Fetch fresh user profile details from Firestore to keep data up to date
-          const userDoc = await getDoc(doc(db, 'users', parsedUser.uid));
-          if (userDoc.exists()) {
-            const dbUser = userDoc.data() as User;
-            const mergedUser = { ...parsedUser, ...dbUser };
-            localStorage.setItem('mockUser', JSON.stringify(mergedUser));
-            setUser(mergedUser);
+          const parsedUser = JSON.parse(storedUser) as User;
+          setUser(parsedUser);
+
+          try {
+            // Fetch fresh user profile details from Firestore to keep data up to date
+            const userDoc = await getDoc(doc(db, 'users', parsedUser.uid));
+            if (userDoc.exists()) {
+              const dbUser = userDoc.data() as User;
+              const mergedUser = { ...parsedUser, ...dbUser };
+              localStorage.setItem('mockUser', JSON.stringify(mergedUser));
+              setUser(mergedUser);
+            }
+          } catch (err) {
+            console.error('Failed to restore user from Firestore:', err);
           }
-        } catch (err) {
-          console.error('Failed to restore user from Firestore:', err);
+        } catch (parseErr) {
+          console.error('Failed to parse stored user from local storage:', parseErr);
+          try {
+            localStorage.removeItem('mockUser');
+          } catch (storageErr) {
+            console.error('Failed to remove corrupted item from localStorage:', storageErr);
+          }
         }
       }
       setLoading(false);
