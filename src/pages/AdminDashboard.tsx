@@ -427,6 +427,12 @@ export default function AdminDashboard() {
                         <p className="text-[10px] text-gray-500 mt-1 font-semibold leading-relaxed max-w-lg truncate">
                           {order.items.map(i => `${i.quantity}x ${i.product.name}`).join(' • ')}
                         </p>
+                        {order.notes && (
+                          <div className="mt-1 px-2 py-0.5 bg-amber-50 border border-amber-100 text-amber-800 text-[9px] font-bold rounded flex items-center gap-1 uppercase tracking-wider max-w-md">
+                            <span className="inline-block w-1 h-1 rounded-full bg-amber-500 animate-pulse"></span>
+                            Obs: {order.notes}
+                          </div>
+                        )}
                         <p className="text-[9px] text-gray-400 font-bold mt-1 uppercase tracking-wider">
                           {format(new Date(order.createdAt), 'dd/MM/yyyy HH:mm')} • {paymentMap[order.paymentMethod || 'pix']}
                         </p>
@@ -581,6 +587,11 @@ export default function AdminDashboard() {
                                 <span className="text-[9px] text-gray-400 ml-1">({item.selectedSize})</span>
                               </div>
                             ))}
+                            {order.notes && (
+                              <div className="text-[9px] font-black text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded inline-block uppercase mt-1 truncate max-w-[200px]" title={order.notes}>
+                                Obs: {order.notes}
+                              </div>
+                            )}
                           </div>
                         </td>
                         <td className="p-3">

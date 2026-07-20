@@ -426,6 +426,16 @@ export default function OrderDetails() {
             </div>
           </div>
 
+          {order.notes && (
+            <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-900 shadow-sm">
+              <h3 className="font-black text-xs text-amber-950 mb-1.5 uppercase tracking-widest flex items-center gap-1.5">
+                <span className="w-2 h-2 bg-amber-600 rounded-full inline-block animate-pulse"></span>
+                Observações do Cliente / Instruções Especiais
+              </h3>
+              <p className="text-xs font-bold leading-relaxed whitespace-pre-wrap">{order.notes}</p>
+            </div>
+          )}
+
           {/* Admin Controls */}
           {isAdmin && (
             <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mt-6">

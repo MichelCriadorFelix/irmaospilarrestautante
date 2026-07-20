@@ -53,6 +53,7 @@ export interface Order {
   address?: string;
   changeRequested?: boolean;
   changeFor?: number;
+  notes?: string;
 }
 
 export interface ChatMessage {

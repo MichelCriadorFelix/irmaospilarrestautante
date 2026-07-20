@@ -5,7 +5,7 @@ import { formatCurrency } from '../lib/utils';
 import { collection, addDoc } from 'firebase/firestore';
 import { db, sanitizeForFirestore } from '../lib/firebase';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, MapPin, Phone, User as UserIcon, Edit2, CreditCard, DollarSign, QrCode } from 'lucide-react';
+import { Trash2, MapPin, Phone, User as UserIcon, Edit2, CreditCard, DollarSign, QrCode, MessageSquare } from 'lucide-react';
 
 export default function Cart() {
   const { items, removeItem, total, clearCart } = useCart();
@@ -15,6 +15,7 @@ export default function Cart() {
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit' | 'debit' | 'cash'>('pix');
   const [needChange, setNeedChange] = useState<boolean | null>(null);
   const [changeFor, setChangeFor] = useState('');
+  const [notes, setNotes] = useState('');
   const navigate = useNavigate();
 
   const isProfileIncomplete = !user?.phone || !user?.address;
@@ -59,6 +60,7 @@ export default function Cart() {
         changeRequested: paymentMethod === 'cash' && needChange === true,
         changeFor: parsedChangeFor,
         address,
+        notes: notes.trim() || null,
         createdAt: Date.now(),
         updatedAt: Date.now()
       });
@@ -217,6 +219,31 @@ export default function Cart() {
         )}
 
         </div>
+
+      {/* Observações do Pedido */}
+      <div className="bg-white shadow-sm rounded-xl border border-gray-100 p-5 mb-6">
+        <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest flex items-center gap-2 mb-4 border-b border-gray-50 pb-3">
+          <MessageSquare size={14} className="text-brand" /> Observações do Pedido
+        </h3>
+        <div>
+          <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
+            Alguma informação ou instrução importante sobre o seu pedido?
+          </label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Ex: sem cebola, sem farofa, troco para R$ 50, campainha com defeito..."
+            maxLength={300}
+            rows={3}
+            className="w-full border border-gray-200 bg-gray-50 rounded-lg py-2 px-3 text-xs text-gray-800 placeholder:text-gray-400 focus:ring-brand focus:border-brand focus:outline-none font-medium resize-none"
+          />
+          <div className="flex justify-end mt-1">
+            <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">
+              {notes.length}/300 caracteres
+            </span>
+          </div>
+        </div>
+      </div>
 
       {/* Forma de Pagamento */}
       <div className="bg-white shadow-sm rounded-xl border border-gray-100 p-5 mb-6">
