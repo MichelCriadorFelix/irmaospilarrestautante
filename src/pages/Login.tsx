@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UtensilsCrossed } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
@@ -12,6 +14,22 @@ export default function Login() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const { loginMock, loginWithSocial } = useAuth();
+  const [companyInfo, setCompanyInfo] = useState<{ name: string; logoUrl?: string }>({
+    name: "Irmãos Pilar"
+  });
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'settings', 'company_info'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        setCompanyInfo({
+          name: data.name || "Irmãos Pilar",
+          logoUrl: data.logoUrl
+        });
+      }
+    });
+    return () => unsub();
+  }, []);
 
   const handleSocialLogin = async (provider: 'google' | 'facebook' | 'github') => {
     setError('');
@@ -65,12 +83,18 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-canvas flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="flex justify-center text-brand">
-          <UtensilsCrossed size={48} />
+      <div className="sm:mx-auto sm:w-full sm:max-w-md flex flex-col items-center">
+        <div className="flex justify-center text-brand shrink-0">
+          {companyInfo.logoUrl ? (
+            <div className="w-16 h-16 rounded-full border border-gray-200 shadow bg-white overflow-hidden flex items-center justify-center">
+              <img src={companyInfo.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            <UtensilsCrossed size={48} />
+          )}
         </div>
-        <h2 className="mt-6 text-center text-3xl font-black text-gray-900 uppercase tracking-wider">
-          Irmãos Pilar
+        <h2 className="mt-4 text-center text-3xl font-black text-gray-900 uppercase tracking-wider">
+          {companyInfo.name}
         </h2>
         <p className="mt-2 text-center text-[10px] font-bold text-gray-500 uppercase tracking-widest">
           Pedidos Online

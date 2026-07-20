@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { collection, query, orderBy, onSnapshot, where, doc, setDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../lib/firebase';
 import { Order, FinanceEntry, CompanyInfo } from '../types';
 import { formatCurrency } from '../lib/utils';
 import { format, subDays } from 'date-fns';
@@ -32,7 +33,10 @@ import {
   RefreshCw, 
   Landmark,
   Save,
-  Check
+  Check,
+  Image as ImageIcon,
+  Upload,
+  Trash2
 } from 'lucide-react';
 import { playNotificationSound } from '../lib/audio';
 
@@ -77,6 +81,93 @@ export default function AdminDashboard() {
   });
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsSavedSuccess, setSettingsSavedSuccess] = useState(false);
+  
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  // Helper to compress logo to max 400x400
+  const compressLogo = (file: File, maxWidth = 400, maxHeight = 400, quality = 0.85): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(event.target?.result as string);
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', quality);
+          resolve(dataUrl);
+        };
+        img.onerror = (err) => reject(err);
+      };
+      reader.onerror = (err) => reject(err);
+    });
+  };
+
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingLogo(true);
+    try {
+      const compressedBase64 = await compressLogo(file);
+
+      let logoUrl = '';
+      try {
+        // Try Firebase Storage first
+        const logoRef = ref(storage, `settings/logo_${Date.now()}_${file.name}`);
+        const res = await fetch(compressedBase64);
+        const blob = await res.blob();
+        const uploadResult = await uploadBytes(logoRef, blob);
+        logoUrl = await getDownloadURL(uploadResult.ref);
+      } catch (storageErr) {
+        console.warn('Firebase Storage error for logo, using base64 fallback:', storageErr);
+        logoUrl = compressedBase64;
+      }
+
+      setCompanyInfo(prev => ({ ...prev, logoUrl }));
+    } catch (err) {
+      console.error('Error uploading logo:', err);
+      alert('Erro ao enviar a logomarca.');
+    } finally {
+      setUploadingLogo(false);
+      if (logoInputRef.current) {
+        logoInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveLogo = () => {
+    setCompanyInfo(prev => {
+      const updated = { ...prev };
+      delete updated.logoUrl;
+      return updated;
+    });
+  };
 
   // History Search/Filters State
   const [searchQuery, setSearchQuery] = useState('');
@@ -818,6 +909,63 @@ export default function AdminDashboard() {
                 <span>Configurações salvas e publicadas com sucesso!</span>
               </div>
             )}
+
+            {/* Logo do App / Estabelecimento */}
+            <div className="bg-gray-50 border border-gray-150 p-4 rounded-xl space-y-3">
+              <label className="block text-[9px] font-black text-gray-500 uppercase tracking-widest">Logomarca do Estabelecimento (Logo do App)</label>
+              
+              <div className="flex flex-col sm:flex-row items-center gap-4">
+                <div className="w-20 h-20 rounded-full border border-gray-200 bg-white overflow-hidden flex items-center justify-center relative shadow-inner shrink-0">
+                  {companyInfo.logoUrl ? (
+                    <img src={companyInfo.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="text-gray-300 flex flex-col items-center">
+                      <ImageIcon size={32} />
+                    </div>
+                  )}
+                  {uploadingLogo && (
+                    <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
+                      <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1.5 flex-1 text-center sm:text-left">
+                  <p className="text-[10px] font-bold text-gray-600">Personalize a identidade visual do seu app.</p>
+                  <p className="text-[9px] text-gray-400">Envie uma imagem quadrada (PNG ou JPEG) para ser exibida nos cabeçalhos, checkout e telas do cliente.</p>
+                  
+                  <div className="flex flex-wrap gap-2 justify-center sm:justify-start pt-1">
+                    <input 
+                      type="file" 
+                      ref={logoInputRef}
+                      onChange={handleLogoChange}
+                      accept="image/*"
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      disabled={uploadingLogo}
+                      onClick={() => logoInputRef.current?.click()}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-brand text-white text-[10px] font-bold uppercase tracking-wider rounded hover:bg-brand-dark transition-all disabled:opacity-50"
+                    >
+                      <Upload size={12} />
+                      {uploadingLogo ? 'Enviando...' : 'Fazer Upload'}
+                    </button>
+                    
+                    {companyInfo.logoUrl && (
+                      <button
+                        type="button"
+                        onClick={handleRemoveLogo}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 text-[10px] font-bold uppercase tracking-wider rounded hover:bg-red-100 hover:border-red-300 transition-all"
+                      >
+                        <Trash2 size={12} />
+                        Remover Logo
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>

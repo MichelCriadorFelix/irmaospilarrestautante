@@ -18,7 +18,7 @@ export default function Home() {
   const [pendingAdd, setPendingAdd] = useState<{
     product: Product;
     selectedOption?: string;
-    selectedSize?: string;
+    selectedSize?: '1 pedaço' | '2 pedaços';
     totalPrice: number;
   } | null>(null);
 
@@ -40,7 +40,7 @@ export default function Home() {
   const handleAddAttempt = (
     product: Product, 
     selectedOption?: string, 
-    selectedSize?: string, 
+    selectedSize?: '1 pedaço' | '2 pedaços', 
     totalPrice?: number
   ) => {
     setPendingAdd({
@@ -289,7 +289,7 @@ function ProductCard({
   onAddAttempt 
 }: { 
   product: Product; 
-  onAddAttempt: (details: { selectedOption?: string; selectedSize?: string; totalPrice: number }) => void; 
+  onAddAttempt: (details: { selectedOption?: string; selectedSize?: '1 pedaço' | '2 pedaços'; totalPrice: number }) => void; 
 }) {
   const [selectedOption, setSelectedOption] = useState<string>(
     product.options && product.options.length > 0 ? 'Nenhum' : ''

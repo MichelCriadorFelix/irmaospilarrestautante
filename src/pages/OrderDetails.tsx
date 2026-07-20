@@ -279,7 +279,7 @@ export default function OrderDetails() {
       try {
         await addDoc(collection(db, 'orders', id, 'messages'), {
           senderId: 'system',
-          senderName: 'Irmãos Pilar',
+          senderName: companyInfo.name || 'Estabelecimento',
           text: systemMessage,
           createdAt: Date.now()
         });

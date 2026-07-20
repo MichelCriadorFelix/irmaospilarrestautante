@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { onSnapshot, doc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { 
   UtensilsCrossed, 
   ShoppingCart, 
@@ -12,7 +14,12 @@ import {
   DollarSign, 
   Bell,
   Download,
-  User as UserIcon
+  User as UserIcon,
+  Share2,
+  PlusSquare,
+  X,
+  Smartphone,
+  Laptop
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -22,12 +29,45 @@ export default function Layout() {
   const location = useLocation();
   const { items } = useCart();
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [showInstallModal, setShowInstallModal] = useState(false);
+  const [companyInfo, setCompanyInfo] = useState<{ name: string; logoUrl?: string }>({
+    name: "Irmãos Pilar"
+  });
 
   useEffect(() => {
+    // Escuta alterações de nome e logo em tempo real
+    const unsub = onSnapshot(doc(db, 'settings', 'company_info'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        setCompanyInfo({
+          name: data.name || "Irmãos Pilar",
+          logoUrl: data.logoUrl
+        });
+      }
+    });
+
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       setDeferredPrompt(e);
     });
+
+    const checkStandalone = () => {
+      setIsStandalone(
+        window.matchMedia('(display-mode: standalone)').matches || 
+        (window.navigator as any).standalone === true
+      );
+    };
+    checkStandalone();
+
+    const media = window.matchMedia('(display-mode: standalone)');
+    const listener = (e: any) => setIsStandalone(e.matches);
+    media.addEventListener('change', listener);
+
+    return () => {
+      unsub();
+      media.removeEventListener('change', listener);
+    };
   }, []);
 
   const handleInstallClick = () => {
@@ -39,6 +79,9 @@ export default function Layout() {
         }
         setDeferredPrompt(null);
       });
+    } else {
+      // Trigger user manual installation help modal
+      setShowInstallModal(true);
     }
   };
 
@@ -58,19 +101,23 @@ export default function Layout() {
       {/* HEADER FOR MOBILE (md:hidden) */}
       <header className="bg-dark text-white h-14 px-4 flex items-center justify-between border-b border-gray-800 md:hidden sticky top-0 z-40">
         <div className="flex items-center space-x-2.5">
-          <div className="w-8 h-8 bg-brand rounded-lg flex items-center justify-center font-bold text-white">
-            <UtensilsCrossed size={16} />
+          <div className="w-8 h-8 bg-brand rounded-lg flex items-center justify-center font-bold text-white overflow-hidden shrink-0">
+            {companyInfo.logoUrl ? (
+              <img src={companyInfo.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+            ) : (
+              <UtensilsCrossed size={16} />
+            )}
           </div>
           <div>
-            <h1 className="font-bold text-xs leading-none uppercase tracking-wider">Irmãos Pilar</h1>
+            <h1 className="font-bold text-xs leading-none uppercase tracking-wider">{companyInfo.name}</h1>
             <p className="text-[8px] text-gray-500 uppercase tracking-widest mt-0.5">{isAdmin ? "Admin" : "Pedidos"}</p>
           </div>
         </div>
         
         <div className="flex items-center space-x-3">
-          {deferredPrompt && (
+          {!isStandalone && (
             <button onClick={handleInstallClick} className="p-1.5 text-gray-400 hover:text-white transition-colors" title="Instalar App">
-              <Download size={18} />
+              <Download size={18} className="animate-bounce-slow" />
             </button>
           )}
           {user && (
@@ -85,11 +132,15 @@ export default function Layout() {
       <nav className="bg-dark text-white md:w-64 flex-shrink-0 md:min-h-screen flex-col border-r border-gray-800 hidden md:flex">
         <div className="p-6 flex flex-col items-start border-b border-gray-800 relative w-full">
           <div className="flex items-center space-x-3 font-bold text-xl">
-            <div className="w-10 h-10 bg-brand rounded-lg flex items-center justify-center font-bold text-xl text-white">
-              <UtensilsCrossed size={20} />
+            <div className="w-10 h-10 bg-brand rounded-lg flex items-center justify-center font-bold text-xl text-white overflow-hidden shrink-0">
+              {companyInfo.logoUrl ? (
+                <img src={companyInfo.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+              ) : (
+                <UtensilsCrossed size={20} />
+              )}
             </div>
             <div>
-              <h1 className="font-bold leading-tight uppercase tracking-wider text-sm">Irmãos Pilar</h1>
+              <h1 className="font-bold leading-tight uppercase tracking-wider text-sm">{companyInfo.name}</h1>
               <p className="text-[10px] text-gray-500 uppercase tracking-widest">{isAdmin ? "Admin Central" : "Pedidos"}</p>
             </div>
           </div>
@@ -126,7 +177,7 @@ export default function Layout() {
         {/* Desktop Install / Logout footer */}
         {user && (
           <div className="p-4 border-t border-gray-800">
-            {deferredPrompt && (
+            {!isStandalone && (
               <button 
                 onClick={handleInstallClick}
                 className="w-full flex items-center justify-center space-x-2 px-3 py-2 mb-3 rounded-lg bg-brand hover:bg-brand-dark transition-colors"
@@ -180,6 +231,76 @@ export default function Layout() {
       <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
         <Outlet />
       </main>
+
+      {/* PWA INSTALLATION INSTRUCTIONAL MODAL */}
+      {showInstallModal && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-[999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 max-w-md w-full overflow-hidden text-gray-800 animate-fade-in">
+            {/* Modal Header */}
+            <div className="p-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Download size={18} className="text-brand" />
+                <h3 className="font-black text-xs uppercase tracking-widest text-gray-900">Como Instalar o Aplicativo</h3>
+              </div>
+              <button 
+                onClick={() => setShowInstallModal(false)}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-5 text-xs">
+              <p className="text-gray-500 font-medium leading-relaxed">
+                Instale nosso aplicativo em sua tela inicial para um acesso super rápido, melhor desempenho e acompanhamento em tempo real dos seus pedidos!
+              </p>
+
+              <div className="space-y-4">
+                {/* Option 1: iOS */}
+                <div className="border border-amber-100 bg-amber-50/50 rounded-xl p-3.5 space-y-2.5">
+                  <div className="flex items-center gap-2 text-amber-900 font-bold">
+                    <Smartphone size={16} className="text-amber-600" />
+                    <span>No iPhone / iPad (iOS Safari)</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1.5 text-amber-800 font-medium">
+                    <li>Abra o link do aplicativo no navegador <strong className="font-bold">Safari</strong>.</li>
+                    <li className="inline-flex items-center gap-1 flex-wrap">
+                      Toque no botão de <strong className="font-bold flex items-center gap-1 bg-white border border-gray-200 px-1.5 py-0.5 rounded shadow-sm text-gray-700 text-[10px]"><Share2 size={10} /> Compartilhar</strong> na barra do Safari.
+                    </li>
+                    <li className="inline-flex items-center gap-1 flex-wrap">
+                      Selecione a opção <strong className="font-bold flex items-center gap-1 bg-white border border-gray-200 px-1.5 py-0.5 rounded shadow-sm text-gray-700 text-[10px]"><PlusSquare size={10} /> Adicionar à Tela de Início</strong>.
+                    </li>
+                    <li>Toque em <strong className="font-bold text-brand">Adicionar</strong> no canto superior direito para concluir!</li>
+                  </ol>
+                </div>
+
+                {/* Option 2: Android & Desktop */}
+                <div className="border border-blue-100 bg-blue-50/50 rounded-xl p-3.5 space-y-2.5">
+                  <div className="flex items-center gap-2 text-blue-900 font-bold">
+                    <Smartphone size={16} className="text-blue-600" />
+                    <span>No Android, Chrome ou Windows</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1.5 text-blue-800 font-medium">
+                    <li>Abra o menu de opções do navegador (três pontos no canto superior/inferior).</li>
+                    <li>Toque em <strong className="font-bold">"Instalar aplicativo"</strong> ou <strong className="font-bold">"Adicionar à Tela inicial"</strong>.</li>
+                    <li>Confirme a instalação no diálogo pop-up que aparece.</li>
+                  </ol>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2 border-t border-gray-100">
+                <button
+                  onClick={() => setShowInstallModal(false)}
+                  className="px-4 py-2 bg-brand text-white font-bold uppercase tracking-wider text-[10px] rounded-lg hover:bg-brand-dark transition-all active:scale-95 shadow-sm"
+                >
+                  Entendi!
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

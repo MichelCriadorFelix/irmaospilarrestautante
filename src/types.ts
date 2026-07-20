@@ -80,5 +80,6 @@ export interface CompanyInfo {
   address: string;
   pixKey: string;
   pixKeyName: string;
+  logoUrl?: string;
 }
 
