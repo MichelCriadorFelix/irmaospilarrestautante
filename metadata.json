@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "Irmãos Pilar",
+  "description": "Sistema completo de pedidos online e delivery em tempo real para o Irmãos Pilar com painel administrativo e CRM avançado.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

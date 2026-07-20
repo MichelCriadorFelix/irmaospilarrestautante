@@ -46,11 +46,13 @@ export interface Order {
   items: CartItem[];
   total: number;
   status: OrderStatus;
-  paymentMethod: 'pix';
+  paymentMethod: 'pix' | 'credit' | 'debit' | 'cash';
   receiptUrl?: string;
   createdAt: number;
   updatedAt: number;
   address?: string;
+  changeRequested?: boolean;
+  changeFor?: number;
 }
 
 export interface ChatMessage {
@@ -70,3 +72,12 @@ export interface FinanceEntry {
   date: number;
   createdAt: number;
 }
+
+export interface CompanyInfo {
+  name: string;
+  phone: string;
+  address: string;
+  pixKey: string;
+  pixKeyName: string;
+}
+

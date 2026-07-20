@@ -5,13 +5,16 @@ import { formatCurrency } from '../lib/utils';
 import { collection, addDoc } from 'firebase/firestore';
 import { db, sanitizeForFirestore } from '../lib/firebase';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, MapPin, Phone, User as UserIcon, Edit2 } from 'lucide-react';
+import { Trash2, MapPin, Phone, User as UserIcon, Edit2, CreditCard, DollarSign, QrCode } from 'lucide-react';
 
 export default function Cart() {
   const { items, removeItem, total, clearCart } = useCart();
   const { user } = useAuth();
   const [address, setAddress] = useState(user?.address || '');
   const [loading, setLoading] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit' | 'debit' | 'cash'>('pix');
+  const [needChange, setNeedChange] = useState<boolean | null>(null);
+  const [changeFor, setChangeFor] = useState('');
   const navigate = useNavigate();
 
   const isProfileIncomplete = !user?.phone || !user?.address;
@@ -31,6 +34,17 @@ export default function Cart() {
       navigate('/profile');
       return;
     }
+
+    const parsedChangeFor = (paymentMethod === 'cash' && needChange === true)
+      ? parseFloat(changeFor.replace(',', '.')) || null
+      : null;
+
+    if (paymentMethod === 'cash' && needChange === true) {
+      if (!parsedChangeFor || parsedChangeFor <= total) {
+        alert('Por favor, informe um valor de troco válido e maior que o total do pedido.');
+        return;
+      }
+    }
     
     setLoading(true);
     try {
@@ -41,7 +55,9 @@ export default function Cart() {
         items,
         total,
         status: 'pending_payment',
-        paymentMethod: 'pix',
+        paymentMethod,
+        changeRequested: paymentMethod === 'cash' && needChange === true,
+        changeFor: parsedChangeFor,
         address,
         createdAt: Date.now(),
         updatedAt: Date.now()
@@ -200,16 +216,159 @@ export default function Cart() {
           </div>
         )}
 
-        <p className="text-[9px] text-gray-400 mt-3 font-bold uppercase tracking-widest text-center">O pagamento será realizado via PIX na próxima etapa.</p>
+        </div>
+
+      {/* Forma de Pagamento */}
+      <div className="bg-white shadow-sm rounded-xl border border-gray-100 p-5 mb-6">
+        <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest flex items-center gap-2 mb-4 border-b border-gray-50 pb-3">
+          <CreditCard size={14} className="text-brand" /> Forma de Pagamento
+        </h3>
+        
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <button
+            type="button"
+            onClick={() => setPaymentMethod('pix')}
+            className={`p-4 rounded-xl border-2 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer ${
+              paymentMethod === 'pix'
+                ? 'border-brand bg-brand/5 text-brand shadow-sm shadow-brand/10'
+                : 'border-gray-100 hover:border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            <QrCode size={20} />
+            <span className="text-[10px] font-black uppercase tracking-wider">PIX</span>
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => {
+              setPaymentMethod('credit');
+              setNeedChange(null);
+            }}
+            className={`p-4 rounded-xl border-2 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer ${
+              paymentMethod === 'credit'
+                ? 'border-brand bg-brand/5 text-brand shadow-sm shadow-brand/10'
+                : 'border-gray-100 hover:border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            <CreditCard size={20} />
+            <span className="text-[10px] font-black uppercase tracking-wider text-center">Crédito</span>
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => {
+              setPaymentMethod('debit');
+              setNeedChange(null);
+            }}
+            className={`p-4 rounded-xl border-2 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer ${
+              paymentMethod === 'debit'
+                ? 'border-brand bg-brand/5 text-brand shadow-sm shadow-brand/10'
+                : 'border-gray-100 hover:border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            <CreditCard size={20} />
+            <span className="text-[10px] font-black uppercase tracking-wider text-center">Débito</span>
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => {
+              setPaymentMethod('cash');
+              setNeedChange(null);
+            }}
+            className={`p-4 rounded-xl border-2 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer ${
+              paymentMethod === 'cash'
+                ? 'border-brand bg-brand/5 text-brand shadow-sm shadow-brand/10'
+                : 'border-gray-100 hover:border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            <DollarSign size={20} />
+            <span className="text-[10px] font-black uppercase tracking-wider text-center">Dinheiro</span>
+          </button>
+        </div>
+
+        {paymentMethod === 'pix' && (
+          <p className="text-[10px] text-gray-400 mt-4 text-center font-bold uppercase tracking-wider">
+            Você receberá as instruções e a chave PIX na próxima etapa para enviar o comprovante.
+          </p>
+        )}
+
+        {(paymentMethod === 'credit' || paymentMethod === 'debit') && (
+          <p className="text-[10px] text-gray-400 mt-4 text-center font-bold uppercase tracking-wider">
+            O entregador levará a maquininha de cartão até o seu endereço para realizar a cobrança.
+          </p>
+        )}
+
+        {paymentMethod === 'cash' && (
+          <div className="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-3">
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Precisa de Troco?</p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setNeedChange(true)}
+                className={`flex-1 py-2 px-4 rounded-lg border text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                  needChange === true
+                    ? 'bg-brand text-white border-brand shadow-sm'
+                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                Sim
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setNeedChange(false);
+                  setChangeFor('');
+                }}
+                className={`flex-1 py-2 px-4 rounded-lg border text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                  needChange === false
+                    ? 'bg-brand text-white border-brand shadow-sm'
+                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                Não (Valor Exato)
+              </button>
+            </div>
+
+            {needChange === true && (
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-black uppercase tracking-widest text-gray-400 block">
+                  Troco para quanto?
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">R$</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={changeFor}
+                    onChange={(e) => setChangeFor(e.target.value.replace(/[^0-9,.]/g, ''))}
+                    placeholder="Ex: 50,00"
+                    className="w-full pl-9 pr-3 py-2 border border-gray-200 focus:border-brand focus:ring-brand rounded-lg text-xs font-bold bg-white"
+                  />
+                </div>
+                {changeFor && parseFloat(changeFor.replace(',', '.')) <= total && (
+                  <p className="text-[9px] text-red-500 font-bold uppercase tracking-wider">
+                    O valor para o troco deve ser maior que o total do pedido ({formatCurrency(total)}).
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex justify-end">
         <button
           onClick={handleCheckout}
-          disabled={loading || isProfileIncomplete}
+          disabled={
+            loading || 
+            isProfileIncomplete || 
+            (paymentMethod === 'cash' && needChange === null) ||
+            (paymentMethod === 'cash' && needChange === true && (!changeFor.trim() || parseFloat(changeFor.replace(',', '.')) <= total))
+          }
           className="w-full sm:w-auto bg-brand text-white px-8 py-3 rounded-lg font-bold text-xs uppercase tracking-widest hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
         >
-          {loading ? 'Processando...' : 'Finalizar Pedido e Pagar'}
+          {loading ? 'Processando...' : 'Finalizar Pedido'}
         </button>
       </div>
     </div>
