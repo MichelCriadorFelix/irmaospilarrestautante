@@ -1,12 +1,20 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User } from '../types';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, auth } from '../lib/firebase';
+import { 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  FacebookAuthProvider, 
+  GithubAuthProvider,
+  signOut
+} from 'firebase/auth';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   loginMock: (role: 'admin' | 'user', email?: string, name?: string) => Promise<void>;
+  loginWithSocial: (providerName: 'google' | 'facebook' | 'github') => Promise<void>;
   logoutMock: () => void;
   updateUser: (data: Partial<User>) => Promise<void>;
 }
@@ -15,6 +23,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null, 
   loading: true, 
   loginMock: async () => {}, 
+  loginWithSocial: async () => {},
   logoutMock: () => {}, 
   updateUser: async () => {} 
 });
@@ -98,6 +107,53 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const logoutMock = () => {
     localStorage.removeItem('mockUser');
     setUser(null);
+    signOut(auth).catch(err => console.error('Error signing out of Firebase:', err));
+  };
+
+  const loginWithSocial = async (providerName: 'google' | 'facebook' | 'github') => {
+    setLoading(true);
+    let provider;
+    if (providerName === 'google') {
+      provider = new GoogleAuthProvider();
+    } else if (providerName === 'facebook') {
+      provider = new FacebookAuthProvider();
+    } else {
+      provider = new GithubAuthProvider();
+    }
+
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const firebaseUser = result.user;
+      const uid = firebaseUser.uid;
+      const email = firebaseUser.email || '';
+      const name = firebaseUser.displayName || 'Usuário Social';
+
+      const userRef = doc(db, 'users', uid);
+      const userSnap = await getDoc(userRef);
+
+      let finalUser: User;
+      if (userSnap.exists()) {
+        finalUser = { ...userSnap.data(), uid, email } as User;
+      } else {
+        const role = email.includes('admin') ? 'admin' : 'user';
+        finalUser = {
+          uid,
+          email,
+          name,
+          role,
+          createdAt: Date.now()
+        };
+        await setDoc(userRef, finalUser);
+      }
+
+      localStorage.setItem('mockUser', JSON.stringify(finalUser));
+      setUser(finalUser);
+    } catch (err) {
+      console.error(`Error logging in with ${providerName}:`, err);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
   };
 
   const updateUser = async (data: Partial<User>) => {
@@ -116,7 +172,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, loginMock, logoutMock, updateUser }}>
+    <AuthContext.Provider value={{ user, loading, loginMock, loginWithSocial, logoutMock, updateUser }}>
       {children}
     </AuthContext.Provider>
   );
