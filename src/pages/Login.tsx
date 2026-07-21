@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UtensilsCrossed } from 'lucide-react';
+import { UtensilsCrossed, AlertTriangle, CheckCircle, ExternalLink } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -17,6 +17,8 @@ export default function Login() {
   const [companyInfo, setCompanyInfo] = useState<{ name: string; logoUrl?: string }>({
     name: "Irmãos Pilar"
   });
+  const [showDomainWarning, setShowDomainWarning] = useState(false);
+  const [warningProvider, setWarningProvider] = useState<'google' | 'facebook'>('google');
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'settings', 'company_info'), (snapshot) => {
@@ -31,26 +33,36 @@ export default function Login() {
     return () => unsub();
   }, []);
 
-  const handleSocialLogin = async (provider: 'google' | 'facebook' | 'github') => {
+  const handleSocialLogin = async (provider: 'google' | 'facebook') => {
     setError('');
     try {
       await loginWithSocial(provider);
-      const stored = localStorage.getItem('mockUser');
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          if (parsed.role === 'admin') {
-            navigate('/admin');
-            return;
-          }
-        } catch (parseErr) {
-          console.error('Error parsing stored user in social login:', parseErr);
-        }
-      }
-      navigate('/');
+      proceedAfterLogin();
     } catch (err: any) {
-      setError(err.message || `Erro ao autenticar com ${provider}`);
+      if (err.message && err.message.startsWith('UNAUTHORIZED_DOMAIN_FALLBACK|')) {
+        const prov = err.message.split('|')[1] as 'google' | 'facebook';
+        setWarningProvider(prov);
+        setShowDomainWarning(true);
+      } else {
+        setError(err.message || `Erro ao autenticar com ${provider}`);
+      }
     }
+  };
+
+  const proceedAfterLogin = () => {
+    const stored = localStorage.getItem('mockUser');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed.role === 'admin') {
+          navigate('/admin');
+          return;
+        }
+      } catch (parseErr) {
+        console.error('Error parsing stored user in social login:', parseErr);
+      }
+    }
+    navigate('/');
   };
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -129,7 +141,7 @@ export default function Login() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-8">
+          <div className="grid grid-cols-2 gap-2 mb-8">
             <button
               onClick={() => handleSocialLogin('google')}
               className="flex items-center justify-center py-2 px-2 border border-gray-200 rounded-lg shadow-sm bg-white text-[11px] font-black text-gray-700 hover:bg-gray-50 uppercase tracking-wider transition-colors cursor-pointer"
@@ -152,16 +164,6 @@ export default function Login() {
                 <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
               </svg>
               Facebook
-            </button>
-            <button
-              onClick={() => handleSocialLogin('github')}
-              className="flex items-center justify-center py-2 px-2 border border-gray-200 rounded-lg shadow-sm bg-white text-[11px] font-black text-gray-700 hover:bg-gray-50 uppercase tracking-wider transition-colors cursor-pointer"
-              title="Entrar com GitHub"
-            >
-              <svg className="w-4 h-4 mr-1.5 shrink-0 fill-current text-gray-900" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.579.688.481C19.138 20.161 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
-              </svg>
-              GitHub
             </button>
           </div>
 
@@ -253,6 +255,73 @@ export default function Login() {
           </div>
         </div>
       </div>
+
+      {showDomainWarning && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <div className="flex items-start gap-4">
+                <div className="p-3 bg-amber-50 text-amber-500 rounded-xl shrink-0">
+                  <AlertTriangle size={24} />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-black text-gray-900 uppercase tracking-wide">
+                    Acesso Liberado! (Domínio Não Autorizado)
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Sua conta de teste foi criada com sucesso e você já está conectado no sistema!
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-4">
+                <div className="bg-amber-50/50 rounded-xl p-4 border border-amber-100 space-y-2">
+                  <p className="text-xs font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    O que aconteceu?
+                  </p>
+                  <p className="text-xs text-amber-900 leading-relaxed">
+                    O domínio <code className="bg-amber-100/70 px-1.5 py-0.5 rounded font-mono font-bold text-[11px]">{window.location.hostname}</code> não está autorizado para autenticação social nas configurações do seu projeto Firebase.
+                  </p>
+                  <p className="text-xs text-amber-900 leading-relaxed font-medium">
+                    Para poupar seu tempo e não travar seu trabalho, geramos automaticamente um perfil de testes do <strong className="capitalize">{warningProvider}</strong>. Você já pode usar todas as funções do sistema agora!
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <h4 className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest">
+                    Como ativar o login real em 3 passos simples:
+                  </h4>
+                  <ol className="text-xs text-gray-600 space-y-2 list-decimal list-inside pl-1">
+                    <li className="leading-relaxed">
+                      Acesse o <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer" className="text-brand font-bold hover:underline inline-flex items-center gap-0.5">Console do Firebase <ExternalLink size={10} /></a>
+                    </li>
+                    <li className="leading-relaxed">
+                      Vá em <strong className="text-gray-800">Authentication</strong> &rarr; aba <strong className="text-gray-800">Settings</strong> (Configurações) &rarr; <strong className="text-gray-800">Authorized domains</strong> (Domínios Autorizados).
+                    </li>
+                    <li className="leading-relaxed">
+                      Adicione o domínio <strong className="text-gray-800 font-mono">{window.location.hostname}</strong> na lista.
+                    </li>
+                  </ol>
+                </div>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end">
+                <button
+                  onClick={() => {
+                    setShowDomainWarning(false);
+                    proceedAfterLogin();
+                  }}
+                  className="w-full sm:w-auto bg-brand hover:bg-brand-dark text-white px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-brand/20 active:scale-98"
+                >
+                  <CheckCircle size={16} />
+                  Entendido, Acessar Sistema!
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

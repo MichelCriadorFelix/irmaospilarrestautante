@@ -14,7 +14,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   loginMock: (role: 'admin' | 'user', email?: string, name?: string) => Promise<void>;
-  loginWithSocial: (providerName: 'google' | 'facebook' | 'github') => Promise<void>;
+  loginWithSocial: (providerName: 'google' | 'facebook') => Promise<void>;
   logoutMock: () => void;
   updateUser: (data: Partial<User>) => Promise<void>;
 }
@@ -119,15 +119,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     signOut(auth).catch(err => console.error('Error signing out of Firebase:', err));
   };
 
-  const loginWithSocial = async (providerName: 'google' | 'facebook' | 'github') => {
+  const loginWithSocial = async (providerName: 'google' | 'facebook') => {
     setLoading(true);
     let provider;
     if (providerName === 'google') {
       provider = new GoogleAuthProvider();
-    } else if (providerName === 'facebook') {
-      provider = new FacebookAuthProvider();
     } else {
-      provider = new GithubAuthProvider();
+      provider = new FacebookAuthProvider();
     }
 
     try {
@@ -157,8 +155,42 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       localStorage.setItem('mockUser', JSON.stringify(finalUser));
       setUser(finalUser);
-    } catch (err) {
+    } catch (err: any) {
       console.error(`Error logging in with ${providerName}:`, err);
+      
+      const errCode = err?.code || '';
+      const errMsg = err?.message || '';
+      const isDomainError = errCode === 'auth/unauthorized-domain' || errMsg.includes('unauthorized-domain') || errMsg.includes('auth/unauthorized-domain');
+      
+      if (isDomainError) {
+        console.warn('Unauthorized domain detected. Logging in with a local fallback account to allow testing.');
+        
+        const mockEmail = `${providerName}-user@teste.com`;
+        const mockName = providerName === 'google' ? 'Usuário Google (Teste)' : 'Usuário Facebook (Teste)';
+        const uid = `social_fallback_${providerName}_temp`;
+        
+        const fallbackUser: User = {
+          uid,
+          email: mockEmail,
+          name: mockName,
+          role: 'user',
+          createdAt: Date.now()
+        };
+        
+        try {
+          const userRef = doc(db, 'users', uid);
+          await setDoc(userRef, fallbackUser, { merge: true });
+        } catch (dbErr) {
+          console.warn('Could not save fallback user to Firestore:', dbErr);
+        }
+        
+        localStorage.setItem('mockUser', JSON.stringify(fallbackUser));
+        setUser(fallbackUser);
+        
+        // Throw a specialized error object that we can catch in the UI to notify the user
+        throw new Error(`UNAUTHORIZED_DOMAIN_FALLBACK|${providerName}`);
+      }
+      
       throw err;
     } finally {
       setLoading(false);
