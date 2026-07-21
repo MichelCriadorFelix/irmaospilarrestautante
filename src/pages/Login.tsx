@@ -7,8 +7,9 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 export default function Login() {
-  const { loginWithEmail, registerWithEmail, resendVerification, user, logout } = useAuth();
+  const { loginWithEmail, registerWithEmail, resendVerification, resetPassword, user, logout } = useAuth();
   const [isRegister, setIsRegister] = useState(false);
+  const [isForgot, setIsForgot] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -33,6 +34,7 @@ export default function Login() {
         });
       }
     });
+
     return () => unsub();
   }, []);
 
@@ -50,7 +52,11 @@ export default function Login() {
     setLoading(true);
 
     try {
-      if (isRegister) {
+      if (isForgot) {
+        await resetPassword(email);
+        setSuccess('Link de recuperação enviado para seu e-mail!');
+        setIsForgot(false);
+      } else if (isRegister) {
         if (!name.trim()) throw new Error('Nome é obrigatório');
         await registerWithEmail(email, password, name);
         setSuccess('Conta criada! Verifique seu e-mail para ativar seu acesso.');
@@ -63,7 +69,10 @@ export default function Login() {
       
       if (err.code === 'auth/user-not-found') message = 'Usuário não encontrado.';
       else if (err.code === 'auth/wrong-password') message = 'Senha incorreta.';
-      else if (err.code === 'auth/email-already-in-use') message = 'Este e-mail já está em uso.';
+      else if (err.code === 'auth/email-already-in-use') {
+        message = 'Este e-mail já possui uma conta. Tente fazer login ou recuperar sua senha.';
+        // Auto switch to login if they prefer
+      }
       else if (err.code === 'auth/invalid-email') message = 'E-mail inválido.';
       else if (err.code === 'auth/weak-password') message = 'A senha deve ter pelo menos 6 caracteres.';
       
@@ -157,35 +166,62 @@ export default function Login() {
           className="bg-white rounded-[2rem] shadow-2xl overflow-hidden border border-gray-100"
         >
           {/* Header Toggle */}
-          <div className="flex bg-gray-50 p-2 m-4 rounded-2xl border border-gray-100">
-            <button
-              onClick={() => { setIsRegister(false); setError(null); setSuccess(null); }}
-              className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${!isRegister ? 'bg-white text-brand shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
-            >
-              Login
-            </button>
-            <button
-              onClick={() => { setIsRegister(true); setError(null); setSuccess(null); }}
-              className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${isRegister ? 'bg-white text-brand shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
-            >
-              Cadastro
-            </button>
-          </div>
+          {!isForgot && (
+            <div className="flex bg-gray-50 p-2 m-4 rounded-2xl border border-gray-100">
+              <button
+                onClick={() => { setIsRegister(false); setError(null); setSuccess(null); }}
+                className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${!isRegister ? 'bg-white text-brand shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+              >
+                Login
+              </button>
+              <button
+                onClick={() => { setIsRegister(true); setError(null); setSuccess(null); }}
+                className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${isRegister ? 'bg-white text-brand shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+              >
+                Cadastro
+              </button>
+            </div>
+          )}
 
           <div className="p-8 pt-4">
             <AnimatePresence mode="wait">
               <motion.form
-                key={isRegister ? 'reg' : 'login'}
-                initial={{ opacity: 0, x: isRegister ? 20 : -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: isRegister ? -20 : 20 }}
+                key={isForgot ? 'forgot' : isRegister ? 'reg' : 'login'}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
                 onSubmit={handleSubmit}
                 className="space-y-4"
               >
+                {isForgot && (
+                  <div className="mb-4">
+                    <button 
+                      type="button" 
+                      onClick={() => setIsForgot(false)}
+                      className="flex items-center gap-2 text-xs font-bold text-gray-400 hover:text-brand transition-colors mb-4 uppercase tracking-widest"
+                    >
+                      <ArrowLeft size={14} /> Voltar
+                    </button>
+                    <h3 className="text-xl font-black text-gray-900 uppercase tracking-tight">Recuperar Senha</h3>
+                    <p className="text-xs text-gray-500 mt-1">Enviaremos um link para seu e-mail.</p>
+                  </div>
+                )}
+
                 {error && (
-                  <div className="p-4 bg-red-50 border border-red-100 text-red-600 rounded-2xl flex items-center gap-3 text-xs font-bold animate-shake">
-                    <AlertCircle size={18} />
-                    {error}
+                  <div className="p-4 bg-red-50 border border-red-100 text-red-600 rounded-2xl flex flex-col gap-2 text-xs font-bold animate-shake">
+                    <div className="flex items-center gap-3">
+                      <AlertCircle size={18} />
+                      {error}
+                    </div>
+                    {error.includes('possui uma conta') && (
+                      <button 
+                        type="button"
+                        onClick={() => { setIsRegister(false); setError(null); }}
+                        className="text-brand underline text-left ml-7"
+                      >
+                        Ir para Login agora
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -196,7 +232,7 @@ export default function Login() {
                   </div>
                 )}
 
-                {isRegister && (
+                {isRegister && !isForgot && (
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nome Completo</label>
                     <div className="relative group">
@@ -228,20 +264,33 @@ export default function Login() {
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Senha</label>
-                  <div className="relative group">
-                    <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-brand transition-colors" />
-                    <input
-                      type="password"
-                      required
-                      value={password}
-                      onChange={e => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full bg-gray-50 border-2 border-gray-50 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold placeholder:text-gray-300 focus:bg-white focus:border-brand focus:ring-4 focus:ring-brand/5 outline-none transition-all"
-                    />
+                {!isForgot && (
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center px-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Senha</label>
+                      {!isRegister && (
+                        <button 
+                          type="button" 
+                          onClick={() => setIsForgot(true)}
+                          className="text-[10px] font-bold text-brand hover:underline uppercase tracking-widest"
+                        >
+                          Esqueci a senha
+                        </button>
+                      )}
+                    </div>
+                    <div className="relative group">
+                      <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-brand transition-colors" />
+                      <input
+                        type="password"
+                        required
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full bg-gray-50 border-2 border-gray-50 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold placeholder:text-gray-300 focus:bg-white focus:border-brand focus:ring-4 focus:ring-brand/5 outline-none transition-all"
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <button
                   type="submit"
@@ -252,8 +301,8 @@ export default function Login() {
                     <Loader2 className="animate-spin" size={20} />
                   ) : (
                     <>
-                      {isRegister ? <UserPlus size={20} /> : <LogIn size={20} />}
-                      {isRegister ? 'Criar minha conta' : 'Entrar no Sistema'}
+                      {isForgot ? <Mail size={20} /> : isRegister ? <UserPlus size={20} /> : <LogIn size={20} />}
+                      {isForgot ? 'Enviar link de recuperação' : isRegister ? 'Criar minha conta' : 'Entrar no Sistema'}
                     </>
                   )}
                 </button>

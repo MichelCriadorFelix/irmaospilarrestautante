@@ -11,6 +11,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendEmailVerification,
+  sendPasswordResetEmail,
   User as FirebaseUser
 } from 'firebase/auth';
 
@@ -23,6 +24,7 @@ interface AuthContextType {
   logout: () => void;
   updateUser: (data: Partial<User>) => Promise<void>;
   resendVerification: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({ 
@@ -33,7 +35,8 @@ const AuthContext = createContext<AuthContextType>({
   loginWithSocial: async () => {},
   logout: () => {}, 
   updateUser: async () => {},
-  resendVerification: async () => {}
+  resendVerification: async () => {},
+  resetPassword: async () => {}
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -122,6 +125,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  const resetPassword = async (email: string) => {
+    await sendPasswordResetEmail(auth, email);
+  };
+
   const logout = () => {
     signOut(auth).catch(err => console.error('Error signing out:', err));
   };
@@ -164,7 +171,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       loginWithSocial, 
       logout, 
       updateUser,
-      resendVerification
+      resendVerification,
+      resetPassword
     }}>
       {children}
     </AuthContext.Provider>

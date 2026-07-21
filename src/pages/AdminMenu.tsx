@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { collection, query, onSnapshot, doc, updateDoc, deleteDoc, setDoc, addDoc } from 'firebase/firestore';
-import { db, sanitizeForFirestore } from '../lib/firebase';
+import { db, sanitizeForFirestore, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Product } from '../types';
 import { formatCurrency } from '../lib/utils';
 import { Edit, Trash2, Plus, X, Check, AlertTriangle, AlertCircle } from 'lucide-react';
@@ -51,11 +51,7 @@ export default function AdminMenu() {
         submessage: `O item "${product.name}" agora está ${!product.available ? 'Disponível' : 'Indisponível'}.`
       });
     } catch (err) {
-      setAlert({
-        type: 'error',
-        message: 'Erro ao atualizar',
-        submessage: 'Não foi possível alterar a disponibilidade.'
-      });
+      handleFirestoreError(err, OperationType.UPDATE, `products/${product.id}`);
     }
   };
 
@@ -73,11 +69,7 @@ export default function AdminMenu() {
         submessage: `O item "${productToDelete.name}" foi removido com sucesso.`
       });
     } catch (err) {
-      setAlert({
-        type: 'error',
-        message: 'Erro ao excluir',
-        submessage: 'Não foi possível remover o item do cardápio.'
-      });
+      handleFirestoreError(err, OperationType.DELETE, `products/${productToDelete.id}`);
     } finally {
       setProductToDelete(null);
     }
@@ -94,11 +86,7 @@ export default function AdminMenu() {
         submessage: `${initialMenu.length} itens padrões foram criados.`
       });
     } catch (err) {
-      setAlert({
-        type: 'error',
-        message: 'Erro ao carregar',
-        submessage: 'Houve uma falha ao alimentar o cardápio.'
-      });
+      handleFirestoreError(err, OperationType.WRITE, 'products');
     }
   };
 
@@ -144,11 +132,7 @@ export default function AdminMenu() {
       setIsFormOpen(false);
       setEditingId(null);
     } catch (err) {
-      setAlert({
-        type: 'error',
-        message: 'Erro ao salvar',
-        submessage: 'Houve um erro técnico. Tente novamente.'
-      });
+      handleFirestoreError(err, editingId ? OperationType.UPDATE : OperationType.CREATE, 'products');
     }
   };
 

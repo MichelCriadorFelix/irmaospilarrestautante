@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { collection, query, orderBy, onSnapshot, where, doc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../lib/firebase';
+import { db, storage, sanitizeForFirestore, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Order, FinanceEntry, CompanyInfo } from '../types';
 import { formatCurrency } from '../lib/utils';
 import { format, subDays } from 'date-fns';
@@ -78,7 +78,8 @@ export default function AdminDashboard() {
     phone: "21 99999-9999",
     address: "Avenida Prefeito José Amorim, Nº 500, Jardim Meriti, São João de Meriti - RJ",
     pixKey: "12.345.678/0001-90",
-    pixKeyName: "Irmãos Pilar Ltda"
+    pixKeyName: "Irmãos Pilar Ltda",
+    openingHours: DEFAULT_OPENING_HOURS
   });
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsSavedSuccess, setSettingsSavedSuccess] = useState(false);
@@ -216,11 +217,15 @@ export default function AdminDashboard() {
           openingHours: data.openingHours || DEFAULT_OPENING_HOURS
         });
       }
+    }, (err) => {
+      handleFirestoreError(err, OperationType.GET, 'settings/company_info');
     });
 
     // Load finances for cost analysis
     const unsubFinances = onSnapshot(collection(db, 'finances'), (snapshot) => {
       setFinances(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as FinanceEntry)));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'finances');
     });
 
     // Load ALL orders for dynamic list filtering & history & CRM
@@ -273,6 +278,8 @@ export default function AdminDashboard() {
       }
 
       setStats({ pending, preparing, todayTotal });
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'orders');
     });
 
     return () => {
@@ -286,12 +293,12 @@ export default function AdminDashboard() {
     e.preventDefault();
     setSavingSettings(true);
     try {
-      await setDoc(doc(db, 'settings', 'company_info'), companyInfo);
+      const dataToSave = sanitizeForFirestore(companyInfo);
+      await setDoc(doc(db, 'settings', 'company_info'), dataToSave);
       setSettingsSavedSuccess(true);
       setTimeout(() => setSettingsSavedSuccess(false), 3000);
     } catch (err) {
-      console.error('Erro ao salvar dados da empresa:', err);
-      alert('Ocorreu um erro ao salvar as configurações.');
+      handleFirestoreError(err, OperationType.WRITE, 'settings/company_info');
     } finally {
       setSavingSettings(false);
     }

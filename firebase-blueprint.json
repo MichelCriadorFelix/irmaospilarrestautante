@@ -1,0 +1,84 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile and role information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "createdAt": { "type": "number" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" }
+      },
+      "required": ["uid", "email", "name", "role", "createdAt"]
+    },
+    "Order": {
+      "title": "Customer Order",
+      "description": "Details of a customer food order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "total": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending_payment", "preparing", "delivering", "completed", "cancelled"] },
+        "paymentMethod": { "type": "string", "enum": ["pix", "credit", "debit", "cash"] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "address": { "type": "string" }
+      },
+      "required": ["id", "userId", "userName", "total", "status", "paymentMethod", "createdAt", "updatedAt"]
+    },
+    "FinanceEntry": {
+      "title": "Finance Entry",
+      "description": "Income or cost entry for finance tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["income", "fixed_cost", "variable_cost"] },
+        "amount": { "type": "number" },
+        "description": { "type": "string" },
+        "date": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "type", "amount", "description", "date", "createdAt"]
+    },
+    "CompanyInfo": {
+      "title": "Company Settings",
+      "description": "General settings and opening hours for the restaurant",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "pixKey": { "type": "string" },
+        "pixKeyName": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "forceClosed": { "type": "boolean" },
+        "openingHours": { "type": "object" }
+      },
+      "required": ["name", "phone", "address", "pixKey", "pixKeyName"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Customer orders"
+    },
+    "/finances/{financeId}": {
+      "schema": "FinanceEntry",
+      "description": "Finance tracking entries"
+    },
+    "/settings/company_info": {
+      "schema": "CompanyInfo",
+      "description": "Global company settings"
+    }
+  }
+}
