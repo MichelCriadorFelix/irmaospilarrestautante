@@ -27,7 +27,7 @@ export default class ErrorBoundary extends Component<Props, State> {
   private handleResetAndReload = () => {
     try {
       // Clear localStorage to fix any state corruption issues
-      localStorage.removeItem('mockUser');
+      localStorage.clear();
       // Also clear other potential cache elements if any
     } catch (e) {
       console.error('Failed to clear localStorage on crash:', e);

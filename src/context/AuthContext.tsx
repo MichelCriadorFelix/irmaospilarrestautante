@@ -6,117 +6,124 @@ import {
   signInWithPopup, 
   GoogleAuthProvider, 
   FacebookAuthProvider, 
-  GithubAuthProvider,
-  signOut
+  signOut,
+  onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendEmailVerification,
+  User as FirebaseUser
 } from 'firebase/auth';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  loginMock: (role: 'admin' | 'user', email?: string, name?: string) => Promise<void>;
+  loginWithEmail: (email: string, pass: string) => Promise<void>;
+  registerWithEmail: (email: string, pass: string, name: string) => Promise<void>;
   loginWithSocial: (providerName: 'google' | 'facebook') => Promise<void>;
-  logoutMock: () => void;
+  logout: () => void;
   updateUser: (data: Partial<User>) => Promise<void>;
+  resendVerification: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({ 
   user: null, 
   loading: true, 
-  loginMock: async () => {}, 
+  loginWithEmail: async () => {},
+  registerWithEmail: async () => {},
   loginWithSocial: async () => {},
-  logoutMock: () => {}, 
-  updateUser: async () => {} 
+  logout: () => {}, 
+  updateUser: async () => {},
+  resendVerification: async () => {}
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const loadUser = async () => {
-      const storedUser = localStorage.getItem('mockUser');
-      if (storedUser) {
-        try {
-          const parsedUser = JSON.parse(storedUser) as User;
-          setUser(parsedUser);
+  // Sync user from Firestore
+  const syncUserFromFirestore = async (firebaseUser: FirebaseUser) => {
+    const userRef = doc(db, 'users', firebaseUser.uid);
+    const userSnap = await getDoc(userRef);
 
-          try {
-            // Fetch fresh user profile details from Firestore to keep data up to date
-            const userDoc = await getDoc(doc(db, 'users', parsedUser.uid));
-            if (userDoc.exists()) {
-              const dbUser = userDoc.data() as User;
-              const mergedUser = { ...parsedUser, ...dbUser };
-              localStorage.setItem('mockUser', JSON.stringify(mergedUser));
-              setUser(mergedUser);
-            }
-          } catch (err) {
-            console.error('Failed to restore user from Firestore:', err);
-          }
-        } catch (parseErr) {
-          console.error('Failed to parse stored user from local storage:', parseErr);
-          try {
-            localStorage.removeItem('mockUser');
-          } catch (storageErr) {
-            console.error('Failed to remove corrupted item from localStorage:', storageErr);
-          }
-        }
-      }
-      setLoading(false);
-    };
-
-    loadUser();
-  }, []);
-
-  const loginMock = async (role: 'admin' | 'user', emailInput?: string, nameInput?: string) => {
-    setLoading(true);
-    const email = emailInput || (role === 'admin' ? 'admin@teste.com' : 'user@teste.com');
-    const name = nameInput || (role === 'admin' ? 'Admin Teste' : 'Usuário Teste');
-    
-    // Generate a deterministic slug for the user to separate multiple users cleanly
-    const emailSlug = email.toLowerCase().replace(/[^a-z0-9]/g, '_');
-    const uid = `${role}_${emailSlug}`;
-
-    try {
-      const userRef = doc(db, 'users', uid);
-      const userSnap = await getDoc(userRef);
-
-      let finalUser: User;
-      if (userSnap.exists()) {
-        finalUser = { ...userSnap.data(), uid, email, role } as User;
-      } else {
-        finalUser = {
-          uid,
-          email,
-          name,
-          role,
-          createdAt: Date.now()
-        };
-        await setDoc(userRef, finalUser);
-      }
-
-      localStorage.setItem('mockUser', JSON.stringify(finalUser));
-      setUser(finalUser);
-    } catch (err) {
-      console.error('Error logging in and fetching Firestore user:', err);
-      // Safe local fallback
-      const fallbackUser: User = {
-        uid,
-        email,
-        name,
+    let userData: User;
+    if (userSnap.exists()) {
+      userData = { ...userSnap.data(), uid: firebaseUser.uid, email: firebaseUser.email || '' } as User;
+    } else {
+      // Default to 'user' role unless email contains 'admin'
+      const role = (firebaseUser.email || '').includes('admin') ? 'admin' : 'user';
+      userData = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email || '',
+        name: firebaseUser.displayName || 'Usuário',
         role,
         createdAt: Date.now()
       };
-      localStorage.setItem('mockUser', JSON.stringify(fallbackUser));
-      setUser(fallbackUser);
+      await setDoc(userRef, userData);
+    }
+
+    // Only set user if email is verified (or if it's a social login that usually comes verified)
+    // We'll pass the verification status through the User type
+    const finalUser = { ...userData, emailVerified: firebaseUser.emailVerified };
+    setUser(finalUser);
+    return finalUser;
+  };
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        await syncUserFromFirestore(firebaseUser);
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const loginWithEmail = async (email: string, pass: string) => {
+    setLoading(true);
+    try {
+      const result = await signInWithEmailAndPassword(auth, email, pass);
+      await syncUserFromFirestore(result.user);
     } finally {
       setLoading(false);
     }
   };
 
-  const logoutMock = () => {
-    localStorage.removeItem('mockUser');
-    setUser(null);
-    signOut(auth).catch(err => console.error('Error signing out of Firebase:', err));
+  const registerWithEmail = async (email: string, pass: string, name: string) => {
+    setLoading(true);
+    try {
+      const result = await createUserWithEmailAndPassword(auth, email, pass);
+      const firebaseUser = result.user;
+      
+      // Save initial profile to Firestore
+      const userData: User = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email || email,
+        name,
+        role: email.includes('admin') ? 'admin' : 'user',
+        createdAt: Date.now()
+      };
+      await setDoc(doc(db, 'users', firebaseUser.uid), userData);
+
+      // Send verification email
+      await sendEmailVerification(firebaseUser);
+      
+      await syncUserFromFirestore(firebaseUser);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resendVerification = async () => {
+    if (auth.currentUser) {
+      await sendEmailVerification(auth.currentUser);
+    }
+  };
+
+  const logout = () => {
+    signOut(auth).catch(err => console.error('Error signing out:', err));
   };
 
   const loginWithSocial = async (providerName: 'google' | 'facebook') => {
@@ -130,68 +137,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     try {
       const result = await signInWithPopup(auth, provider);
-      const firebaseUser = result.user;
-      const uid = firebaseUser.uid;
-      const email = firebaseUser.email || '';
-      const name = firebaseUser.displayName || 'Usuário Social';
-
-      const userRef = doc(db, 'users', uid);
-      const userSnap = await getDoc(userRef);
-
-      let finalUser: User;
-      if (userSnap.exists()) {
-        finalUser = { ...userSnap.data(), uid, email } as User;
-      } else {
-        const role = email.includes('admin') ? 'admin' : 'user';
-        finalUser = {
-          uid,
-          email,
-          name,
-          role,
-          createdAt: Date.now()
-        };
-        await setDoc(userRef, finalUser);
-      }
-
-      localStorage.setItem('mockUser', JSON.stringify(finalUser));
-      setUser(finalUser);
-    } catch (err: any) {
-      console.error(`Error logging in with ${providerName}:`, err);
-      
-      const errCode = err?.code || '';
-      const errMsg = err?.message || '';
-      const isDomainError = errCode === 'auth/unauthorized-domain' || errMsg.includes('unauthorized-domain') || errMsg.includes('auth/unauthorized-domain');
-      
-      if (isDomainError) {
-        console.warn('Unauthorized domain detected. Logging in with a local fallback account to allow testing.');
-        
-        const mockEmail = `${providerName}-user@teste.com`;
-        const mockName = providerName === 'google' ? 'Usuário Google (Teste)' : 'Usuário Facebook (Teste)';
-        const uid = `social_fallback_${providerName}_temp`;
-        
-        const fallbackUser: User = {
-          uid,
-          email: mockEmail,
-          name: mockName,
-          role: 'user',
-          createdAt: Date.now()
-        };
-        
-        try {
-          const userRef = doc(db, 'users', uid);
-          await setDoc(userRef, fallbackUser, { merge: true });
-        } catch (dbErr) {
-          console.warn('Could not save fallback user to Firestore:', dbErr);
-        }
-        
-        localStorage.setItem('mockUser', JSON.stringify(fallbackUser));
-        setUser(fallbackUser);
-        
-        // Throw a specialized error object that we can catch in the UI to notify the user
-        throw new Error(`UNAUTHORIZED_DOMAIN_FALLBACK|${providerName}`);
-      }
-      
-      throw err;
+      await syncUserFromFirestore(result.user);
     } finally {
       setLoading(false);
     }
@@ -200,20 +146,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const updateUser = async (data: Partial<User>) => {
     if (user) {
       const updated = { ...user, ...data };
-      localStorage.setItem('mockUser', JSON.stringify(updated));
       setUser(updated);
-
       try {
-        const userRef = doc(db, 'users', user.uid);
-        await setDoc(userRef, updated, { merge: true });
+        await setDoc(doc(db, 'users', user.uid), updated, { merge: true });
       } catch (err) {
-        console.error('Failed to sync updated user to Firestore:', err);
+        console.error('Failed to sync updated user:', err);
       }
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, loginMock, loginWithSocial, logoutMock, updateUser }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      loading, 
+      loginWithEmail, 
+      registerWithEmail, 
+      loginWithSocial, 
+      logout, 
+      updateUser,
+      resendVerification
+    }}>
       {children}
     </AuthContext.Provider>
   );

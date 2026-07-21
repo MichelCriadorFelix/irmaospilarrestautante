@@ -16,6 +16,7 @@ export interface User {
   addressReference?: string;
   role: Role;
   createdAt: number;
+  emailVerified?: boolean;
 }
 
 export interface Product {

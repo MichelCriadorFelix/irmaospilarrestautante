@@ -22,8 +22,17 @@ import Profile from './pages/Profile';
 const ProtectedRoute = ({ children, adminOnly = false }: { children: React.ReactNode, adminOnly?: boolean }) => {
   const { user, loading } = useAuth();
   
-  if (loading) return <div>Carregando...</div>;
+  if (loading) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-4 border-brand border-t-transparent"></div>
+    </div>
+  );
+
   if (!user) return <Navigate to="/login" />;
+  
+  // Requirement: Email must be verified to access protected routes
+  if (!user.emailVerified) return <Navigate to="/login" />;
+
   if (adminOnly && user.role !== 'admin') return <Navigate to="/" />;
   
   return <>{children}</>;
