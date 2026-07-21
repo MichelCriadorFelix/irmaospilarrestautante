@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LogIn, UserPlus, Mail, Lock, User as UserIcon, Loader2, AlertCircle, CheckCircle, ArrowLeft, UtensilsCrossed } from 'lucide-react';
+import { LogIn, UserPlus, Mail, Lock, User as UserIcon, Loader2, AlertCircle, CheckCircle, ArrowLeft, UtensilsCrossed, Globe } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 export default function Login() {
-  const { loginWithEmail, registerWithEmail, resendVerification, resetPassword, refreshUser, user, logout } = useAuth();
+  const { loginWithEmail, registerWithEmail, resendVerification, resetPassword, refreshUser, loginWithSocial, user, logout } = useAuth();
   const [isRegister, setIsRegister] = useState(false);
   const [isForgot, setIsForgot] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -324,6 +324,38 @@ export default function Login() {
                     </>
                   )}
                 </button>
+
+                {!isForgot && (
+                  <>
+                    <div className="relative my-8">
+                      <div className="absolute inset-0 flex items-center">
+                        <div className="w-full border-t border-gray-100"></div>
+                      </div>
+                      <div className="relative flex justify-center text-[10px] font-black uppercase tracking-widest">
+                        <span className="bg-white px-4 text-gray-300 italic">ou entre com</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <button
+                        type="button"
+                        onClick={() => loginWithSocial('google')}
+                        className="flex items-center justify-center gap-3 py-3 px-4 rounded-2xl border-2 border-gray-50 bg-gray-50 hover:bg-white hover:border-gray-100 hover:shadow-md transition-all active:scale-95 group"
+                      >
+                        <Globe size={18} className="text-gray-400 group-hover:text-red-500 transition-colors" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-gray-500 group-hover:text-gray-900">Google</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => loginWithSocial('facebook')}
+                        className="flex items-center justify-center gap-3 py-3 px-4 rounded-2xl border-2 border-gray-50 bg-gray-50 hover:bg-white hover:border-gray-100 hover:shadow-md transition-all active:scale-95 group"
+                      >
+                        <Globe size={18} className="text-gray-400 group-hover:text-blue-600 transition-colors" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-gray-500 group-hover:text-gray-900">Facebook</span>
+                      </button>
+                    </div>
+                  </>
+                )}
               </motion.form>
             </AnimatePresence>
           </div>

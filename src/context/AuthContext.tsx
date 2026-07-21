@@ -54,11 +54,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (userSnap.exists()) {
       userData = { ...userSnap.data(), uid: firebaseUser.uid, email: firebaseUser.email || '' } as User;
     } else {
-      // Default to 'user' role unless email contains 'admin'
-      const role = (firebaseUser.email || '').includes('admin') ? 'admin' : 'user';
+      // Default to 'user' role unless email contains 'admin' or is a known owner
+      const email = firebaseUser.email || '';
+      const role = (email.includes('admin') || email === 'michelgeminicriador@gmail.com' || email === 'felixcastroadv@gmail.com') ? 'admin' : 'user';
       userData = {
         uid: firebaseUser.uid,
-        email: firebaseUser.email || '',
+        email: email,
         name: firebaseUser.displayName || 'Usuário',
         role,
         createdAt: Date.now()
@@ -103,11 +104,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const firebaseUser = result.user;
       
       // Save initial profile to Firestore
+      const role = (email.includes('admin') || email === 'michelgeminicriador@gmail.com' || email === 'felixcastroadv@gmail.com') ? 'admin' : 'user';
       const userData: User = {
         uid: firebaseUser.uid,
         email: firebaseUser.email || email,
         name,
-        role: email.includes('admin') ? 'admin' : 'user',
+        role,
         createdAt: Date.now()
       };
       await setDoc(doc(db, 'users', firebaseUser.uid), userData);
