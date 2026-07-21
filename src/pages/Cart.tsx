@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { formatCurrency } from '../lib/utils';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, onSnapshot } from 'firebase/firestore';
 import { db, sanitizeForFirestore } from '../lib/firebase';
 import { useNavigate } from 'react-router-dom';
 import { Trash2, MapPin, Phone, User as UserIcon, Edit2, CreditCard, DollarSign, QrCode, MessageSquare, AlertCircle, Check, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { CompanyInfo } from '../types';
+import { isStoreOpen } from '../lib/openingHours';
 
 export default function Cart() {
   const { items, removeItem, total, clearCart } = useCart();
@@ -17,7 +19,17 @@ export default function Cart() {
   const [needChange, setNeedChange] = useState<boolean | null>(null);
   const [changeFor, setChangeFor] = useState('');
   const [notes, setNotes] = useState('');
+  const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'settings', 'company_info'), (snapshot) => {
+      if (snapshot.exists()) {
+        setCompanyInfo(snapshot.data() as CompanyInfo);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   const [alertState, setAlertState] = useState<{
     type: 'success' | 'error' | 'warning';
@@ -46,6 +58,17 @@ export default function Cart() {
   const handleCheckout = async () => {
     if (!user) return;
     if (items.length === 0) return;
+
+    const status = isStoreOpen(companyInfo);
+    if (!status.isOpen && user?.role !== 'admin') {
+      setAlertState({
+        type: 'error',
+        message: 'Estabelecimento Fechado',
+        submessage: status.reason
+      });
+      return;
+    }
+
     if (isProfileIncomplete) {
       setAlertState({
         type: 'warning',
@@ -414,20 +437,42 @@ export default function Cart() {
         )}
       </div>
 
-      <div className="flex justify-end">
-        <button
-          onClick={handleCheckout}
-          disabled={
-            loading || 
-            isProfileIncomplete || 
-            (paymentMethod === 'cash' && needChange === null) ||
-            (paymentMethod === 'cash' && needChange === true && (!changeFor.trim() || parseFloat(changeFor.replace(',', '.')) <= total))
-          }
-          className="w-full sm:w-auto bg-brand text-white px-8 py-3 rounded-lg font-bold text-xs uppercase tracking-widest hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
-        >
-          {loading ? 'Processando...' : 'Finalizar Pedido'}
-        </button>
-      </div>
+      {(() => {
+        const status = isStoreOpen(companyInfo);
+        const closedBlock = !status.isOpen && user?.role !== 'admin';
+        return (
+          <>
+            {closedBlock && (
+              <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 flex items-start gap-3 shadow-xs animate-pulse">
+                <div className="p-2 bg-amber-100 text-amber-700 rounded-lg shrink-0 mt-0.5">
+                  <AlertCircle size={18} />
+                </div>
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-amber-950">Aviso: Estabelecimento Fechado</h3>
+                  <p className="text-xs font-bold mt-1 text-amber-850 leading-relaxed">{status.reason}</p>
+                  <p className="text-[10px] uppercase font-black tracking-widest text-amber-600 mt-2">Os pedidos estão temporariamente indisponíveis devido ao horário de funcionamento.</p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <button
+                onClick={handleCheckout}
+                disabled={
+                  loading || 
+                  closedBlock ||
+                  isProfileIncomplete || 
+                  (paymentMethod === 'cash' && needChange === null) ||
+                  (paymentMethod === 'cash' && needChange === true && (!changeFor.trim() || parseFloat(changeFor.replace(',', '.')) <= total))
+                }
+                className="w-full sm:w-auto bg-brand text-white px-8 py-3 rounded-lg font-bold text-xs uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
+              >
+                {loading ? 'Processando...' : 'Finalizar Pedido'}
+              </button>
+            </div>
+          </>
+        );
+      })()}
 
       {/* Floating Animated Toast Alert */}
       <AnimatePresence>

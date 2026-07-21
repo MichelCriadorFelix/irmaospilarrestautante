@@ -39,6 +39,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { playNotificationSound } from '../lib/audio';
+import { DEFAULT_OPENING_HOURS, DAY_NAMES, DAYS_ORDER } from '../lib/openingHours';
 
 const statusMap = {
   pending_payment: 'Aguardando PIX',
@@ -169,6 +170,22 @@ export default function AdminDashboard() {
     });
   };
 
+  const handleDayHoursChange = (dayKey: string, field: 'isOpen' | 'openTime' | 'closeTime', value: any) => {
+    setCompanyInfo(prev => {
+      const hours = prev.openingHours || DEFAULT_OPENING_HOURS;
+      return {
+        ...prev,
+        openingHours: {
+          ...hours,
+          [dayKey]: {
+            ...hours[dayKey],
+            [field]: value
+          }
+        }
+      };
+    });
+  };
+
   // History Search/Filters State
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -187,7 +204,17 @@ export default function AdminDashboard() {
     // Load Company Settings
     const unsubSettings = onSnapshot(doc(db, 'settings', 'company_info'), (snapshot) => {
       if (snapshot.exists()) {
-        setCompanyInfo(snapshot.data() as CompanyInfo);
+        const data = snapshot.data() as CompanyInfo;
+        setCompanyInfo({
+          name: data.name || '',
+          phone: data.phone || '',
+          address: data.address || '',
+          pixKey: data.pixKey || '',
+          pixKeyName: data.pixKeyName || '',
+          logoUrl: data.logoUrl,
+          forceClosed: data.forceClosed || false,
+          openingHours: data.openingHours || DEFAULT_OPENING_HOURS
+        });
       }
     });
 
@@ -1028,6 +1055,77 @@ export default function AdminDashboard() {
                   placeholder="Ex: Irmãos Pilar de Meriti Ltda"
                   className="w-full border border-gray-200 bg-gray-50 rounded-lg py-2 px-3 text-xs font-bold text-gray-800 focus:ring-brand focus:border-brand"
                 />
+              </div>
+            </div>
+
+            {/* MANUAL OVERRIDE (FORCE CLOSED) */}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-black text-amber-950 uppercase tracking-wider">Fechamento Manual (Forçado)</h4>
+                  <p className="text-[10px] text-amber-800 font-medium mt-1">Ative para fechar o restaurante imediatamente, ignorando os horários programados. Útil em feriados ou alta demanda.</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={companyInfo.forceClosed || false}
+                    onChange={e => setCompanyInfo(prev => ({ ...prev, forceClosed: e.target.checked }))}
+                    className="sr-only peer" 
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand"></div>
+                </label>
+              </div>
+            </div>
+
+            {/* WEEKLY OPENING HOURS */}
+            <div className="border-t border-gray-100 pt-6 mt-6">
+              <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">Horário de Funcionamento Semanal</h4>
+              <p className="text-[10px] text-gray-400 uppercase font-black tracking-wider mb-4">Programe os dias e horários em que o restaurante aceita pedidos de forma automática.</p>
+              
+              <div className="space-y-3 bg-gray-50/50 rounded-xl border border-gray-100 p-4">
+                {DAYS_ORDER.map(dayKey => {
+                  const dayHours = (companyInfo.openingHours || DEFAULT_OPENING_HOURS)[dayKey] || { isOpen: false, openTime: '11:00', closeTime: '23:00' };
+                  return (
+                    <div key={dayKey} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2 rounded-lg bg-white border border-gray-100 shadow-xs hover:border-gray-200 transition-colors">
+                      <div className="flex items-center gap-3 min-w-[150px]">
+                        <input
+                          type="checkbox"
+                          id={`day-${dayKey}`}
+                          checked={dayHours.isOpen}
+                          onChange={e => handleDayHoursChange(dayKey, 'isOpen', e.target.checked)}
+                          className="w-4 h-4 text-brand border-gray-300 rounded-sm focus:ring-brand focus:ring-2"
+                        />
+                        <label htmlFor={`day-${dayKey}`} className="text-xs font-black uppercase tracking-wider text-gray-700 cursor-pointer">
+                          {DAY_NAMES[dayKey]}
+                        </label>
+                      </div>
+
+                      <div className={`flex items-center gap-3 transition-opacity duration-200 ${dayHours.isOpen ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Abre:</span>
+                          <input
+                            type="time"
+                            value={dayHours.openTime}
+                            disabled={!dayHours.isOpen}
+                            onChange={e => handleDayHoursChange(dayKey, 'openTime', e.target.value)}
+                            className="border border-gray-200 rounded-md py-1 px-2 text-xs font-bold text-gray-750 bg-gray-50 focus:ring-brand focus:border-brand"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Fecha:</span>
+                          <input
+                            type="time"
+                            value={dayHours.closeTime}
+                            disabled={!dayHours.isOpen}
+                            onChange={e => handleDayHoursChange(dayKey, 'closeTime', e.target.value)}
+                            className="border border-gray-200 rounded-md py-1 px-2 text-xs font-bold text-gray-750 bg-gray-50 focus:ring-brand focus:border-brand"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 

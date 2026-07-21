@@ -7,7 +7,7 @@ import { Order, ChatMessage } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { formatCurrency } from '../lib/utils';
 import { format } from 'date-fns';
-import { Send, Upload, Copy, Check, CreditCard, ChefHat, Truck, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react';
+import { Send, Upload, Copy, Check, CreditCard, ChefHat, Truck, CheckCircle, XCircle, Clock, AlertCircle, Printer } from 'lucide-react';
 import { playNotificationSound } from '../lib/audio';
 import { AnimatePresence, motion } from 'framer-motion';
 
@@ -62,6 +62,10 @@ export default function OrderDetails() {
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [selectedPrinterSize, setSelectedPrinterSize] = useState<'80mm' | '58mm'>('80mm');
+  const [printType, setPrintType] = useState<'delivery' | 'kitchen' | 'both'>('delivery');
 
   const [alert, setAlert] = useState<{
     type: 'success' | 'error' | 'warning';
@@ -176,6 +180,23 @@ export default function OrderDetails() {
     });
   };
 
+  const base64ToBlob = (base64: string): Blob => {
+    try {
+      const parts = base64.split(';base64,');
+      const contentType = parts[0].split(':')[1];
+      const raw = window.atob(parts[1]);
+      const rawLength = raw.length;
+      const uInt8Array = new Uint8Array(rawLength);
+      for (let i = 0; i < rawLength; ++i) {
+        uInt8Array[i] = raw.charCodeAt(i);
+      }
+      return new Blob([uInt8Array], { type: contentType });
+    } catch (e) {
+      console.error('Error converting base64 to blob:', e);
+      return new Blob([], { type: 'image/jpeg' });
+    }
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() && !selectedImage) return;
@@ -190,14 +211,13 @@ export default function OrderDetails() {
           const compressedBase64 = await compressImage(selectedImage.file);
           
           try {
-            // Tentativa de upload para o Storage
+            // Tentativa de upload para o Storage usando o blob convertido localmente sem fetch
             const fileRef = ref(storage, `orders/${id}/receipts/${Date.now()}_${selectedImage.file.name}`);
-            const res = await fetch(compressedBase64);
-            const blob = await res.blob();
+            const blob = base64ToBlob(compressedBase64);
             const uploadResult = await uploadBytes(fileRef, blob);
             imageUrl = await getDownloadURL(uploadResult.ref);
           } catch (storageErr) {
-            console.warn('Error uploading to Firebase Storage, fallback to compressed Base64', storageErr);
+            console.warn('Error uploading to Firebase Storage, fallback to compressed Base64:', storageErr);
             imageUrl = compressedBase64;
           }
         } catch (compErr) {
@@ -214,25 +234,33 @@ export default function OrderDetails() {
 
       const textToSend = newMessage.trim();
 
-      await addDoc(collection(db, 'orders', id, 'messages'), {
-        senderId: user.uid,
-        senderName: user.name,
-        text: textToSend || 'Envio de comprovante/imagem',
-        ...(imageUrl ? { imageUrl } : {}),
-        createdAt: Date.now()
-      });
-
-      if (imageUrl && order?.status === 'pending_payment') {
-        await updateDoc(doc(db, 'orders', id), {
-          receiptUrl: imageUrl
-        });
-      }
-
+      // Limpa os campos do formulário IMEDIATAMENTE para a UI ficar livre e responsiva
       setNewMessage('');
       if (selectedImage) {
         URL.revokeObjectURL(selectedImage.previewUrl);
         setSelectedImage(null);
       }
+      setUploading(false);
+
+      // Salva no banco de forma assíncrona (Firestore gerencia fila offline se houver queda)
+      addDoc(collection(db, 'orders', id, 'messages'), {
+        senderId: user.uid,
+        senderName: user.name,
+        text: textToSend || 'Envio de comprovante/imagem',
+        ...(imageUrl ? { imageUrl } : {}),
+        createdAt: Date.now()
+      }).catch(err => {
+        console.error('Erro assíncrono ao salvar mensagem:', err);
+      });
+
+      if (imageUrl && order?.status === 'pending_payment') {
+        updateDoc(doc(db, 'orders', id), {
+          receiptUrl: imageUrl
+        }).catch(err => {
+          console.error('Erro assíncrono ao vincular comprovante:', err);
+        });
+      }
+
     } catch (err) {
       console.error('Error sending message:', err);
       setAlert({
@@ -240,7 +268,6 @@ export default function OrderDetails() {
         message: 'Erro ao enviar',
         submessage: 'Houve uma falha ao enviar sua mensagem.'
       });
-    } finally {
       setUploading(false);
     }
   };
@@ -295,6 +322,118 @@ export default function OrderDetails() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const generatePrintHTML = (size: '80mm' | '58mm', type: 'delivery' | 'kitchen') => {
+    if (!order) return '';
+    const width = size === '80mm' ? '302px' : '219px';
+    const isKitchen = type === 'kitchen';
+    
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            @page { margin: 0; }
+            body { 
+              width: ${width}; 
+              margin: 0; 
+              padding: 10px; 
+              font-family: 'Courier New', Courier, monospace; 
+              font-size: ${size === '80mm' ? '14px' : '12px'};
+              line-height: 1.2;
+              color: black;
+            }
+            .header { text-align: center; margin-bottom: 10px; border-bottom: 1px dashed black; padding-bottom: 10px; }
+            .title { font-weight: bold; font-size: 1.2em; text-transform: uppercase; }
+            .section { margin-bottom: 10px; border-bottom: 1px dashed black; padding-bottom: 5px; }
+            .item { display: flex; justify-content: space-between; margin-bottom: 5px; }
+            .item-details { padding-left: 10px; font-size: 0.9em; font-style: italic; }
+            .total-section { font-weight: bold; font-size: 1.1em; text-align: right; }
+            .footer { text-align: center; margin-top: 15px; font-size: 0.8em; }
+            .label { font-weight: bold; text-transform: uppercase; font-size: 0.85em; }
+            .divider { border-top: 1px dashed black; margin: 5px 0; }
+            @media print {
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body onload="window.print(); window.close();">
+          <div class="header">
+            <div class="title">${companyInfo.name || 'IRMAOS PILAR'}</div>
+            <div style="font-size: 0.9em; margin-top: 5px;">PEDIDO #${order.id.slice(-6).toUpperCase()}</div>
+            <div style="font-size: 0.8em;">${format(order.createdAt, 'dd/MM/yyyy HH:mm')}</div>
+          </div>
+
+          ${!isKitchen ? `
+          <div class="section">
+            <div class="label">Cliente:</div>
+            <div>${order.customerName}</div>
+            <div class="label" style="margin-top: 5px;">Telefone:</div>
+            <div>${order.customerPhone}</div>
+          </div>
+
+          <div class="section">
+            <div class="label">Endereço de Entrega:</div>
+            <div>${order.customerAddress}</div>
+          </div>
+          ` : `
+          <div class="section" style="text-align: center; background: #eee; padding: 5px;">
+            <div class="title">COZINHA / PRODUÇÃO</div>
+          </div>
+          `}
+
+          <div class="section">
+            <div class="label" style="margin-bottom: 5px;">Itens do Pedido:</div>
+            ${order.items.map(item => `
+              <div class="item">
+                <span>${item.quantity}x ${item.product.name}</span>
+                ${!isKitchen ? `<span>${formatCurrency(item.totalPrice)}</span>` : ''}
+              </div>
+              ${item.selectedOption ? `<div class="item-details">- Opção: ${item.selectedOption}</div>` : ''}
+              ${item.selectedSize ? `<div class="item-details">- Tamanho: ${item.selectedSize}</div>` : ''}
+              <div class="divider"></div>
+            `).join('')}
+          </div>
+
+          ${!isKitchen ? `
+          <div class="total-section">
+            <div class="item">
+              <span>SUBTOTAL:</span>
+              <span>${formatCurrency(order.total)}</span>
+            </div>
+            <div class="item">
+              <span>TOTAL:</span>
+              <span>${formatCurrency(order.total)}</span>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="label">Pagamento:</div>
+            <div>${statusMap[order.status as keyof typeof statusMap] || order.status}</div>
+            ${order.notes ? `
+              <div class="label" style="margin-top: 5px;">Observações:</div>
+              <div>${order.notes}</div>
+            ` : ''}
+          </div>
+          ` : ''}
+
+          <div class="footer">
+            ${isKitchen ? '--- BOM TRABALHO ---' : '--- OBRIGADO PELA PREFERÊNCIA ---'}
+          </div>
+        </body>
+      </html>
+    `;
+  };
+
+  const handlePrint = (type: 'delivery' | 'kitchen') => {
+    const printWindow = window.open('', '_blank', 'width=400,height=600');
+    if (!printWindow) return;
+    
+    printWindow.document.write(generatePrintHTML(selectedPrinterSize, type));
+    printWindow.document.close();
+    setIsPrintModalOpen(false);
+  };
+
   if (!order) return <div className="p-8">Carregando...</div>;
 
   const isAdmin = user?.role === 'admin';
@@ -320,7 +459,18 @@ export default function OrderDetails() {
         <div className="bg-white shadow rounded-lg p-6 mb-6">
           <div className="flex justify-between items-start mb-6 border-b border-gray-100 pb-4">
             <div>
-              <h1 className="text-xl font-black text-gray-900 mb-0.5 uppercase tracking-wider">Pedido #{order.id.slice(-6).toUpperCase()}</h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl font-black text-gray-900 mb-0.5 uppercase tracking-wider">Pedido #{order.id.slice(-6).toUpperCase()}</h1>
+                {isAdmin && (
+                  <button 
+                    onClick={() => setIsPrintModalOpen(true)}
+                    className="p-1.5 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer group"
+                    title="Imprimir Pedido"
+                  >
+                    <Printer size={16} className="group-hover:scale-110 transition-transform" />
+                  </button>
+                )}
+              </div>
               <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">{format(new Date(order.createdAt), 'dd/MM/yyyy HH:mm')}</p>
               {isAdmin && <p className="text-gray-900 mt-2 font-bold text-xs uppercase">Cliente: <span className="text-brand">{order.userName}</span></p>}
             </div>
@@ -663,6 +813,87 @@ export default function OrderDetails() {
           </form>
         </div>
       </div>
+
+      {/* Print Selection Modal */}
+      <AnimatePresence>
+        {isPrintModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm"
+            onClick={() => setIsPrintModalOpen(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="bg-brand p-4 text-white flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Printer size={20} />
+                  <h3 className="font-black uppercase tracking-wider text-sm">Opções de Impressão</h3>
+                </div>
+                <button onClick={() => setIsPrintModalOpen(false)} className="hover:bg-white/20 p-1 rounded-lg transition-colors">
+                  <XCircle size={20} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                <div>
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Tamanho da Impressora</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => setSelectedPrinterSize('80mm')}
+                      className={`py-3 px-4 rounded-xl border-2 font-black uppercase text-[10px] tracking-wider transition-all flex flex-col items-center gap-2 ${
+                        selectedPrinterSize === '80mm' ? 'border-brand bg-brand/5 text-brand' : 'border-gray-100 text-gray-400 hover:border-gray-200'
+                      }`}
+                    >
+                      <span className="text-lg">📏</span>
+                      80mm (Grande)
+                    </button>
+                    <button
+                      onClick={() => setSelectedPrinterSize('58mm')}
+                      className={`py-3 px-4 rounded-xl border-2 font-black uppercase text-[10px] tracking-wider transition-all flex flex-col items-center gap-2 ${
+                        selectedPrinterSize === '58mm' ? 'border-brand bg-brand/5 text-brand' : 'border-gray-100 text-gray-400 hover:border-gray-200'
+                      }`}
+                    >
+                      <span className="text-lg">📏</span>
+                      58mm (Pequena)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">O que deseja imprimir?</p>
+                  
+                  <button
+                    onClick={() => handlePrint('delivery')}
+                    className="w-full bg-gray-900 text-white py-4 rounded-xl font-black uppercase text-xs tracking-widest hover:bg-gray-800 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <Printer size={16} />
+                    Imprimir Via Entrega
+                  </button>
+
+                  <button
+                    onClick={() => handlePrint('kitchen')}
+                    className="w-full bg-white border-2 border-gray-900 text-gray-900 py-4 rounded-xl font-black uppercase text-xs tracking-widest hover:bg-gray-50 transition-all active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <ChefHat size={16} />
+                    Imprimir Via Cozinha
+                  </button>
+                </div>
+
+                <p className="text-[9px] text-gray-400 text-center font-bold uppercase tracking-tighter italic">
+                  * A impressão abrirá uma nova janela para comando direto do sistema.
+                </p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Fullscreen Image Preview Modal */}
       {previewImage && (

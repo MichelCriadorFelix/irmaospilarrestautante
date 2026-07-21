@@ -1,19 +1,30 @@
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, addDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Product } from '../types';
+import { Product, CompanyInfo } from '../types';
 import { useCart } from '../context/CartContext';
 import { formatCurrency } from '../lib/utils';
 import { Plus, Check, X, ShoppingBag, HelpCircle, AlertCircle } from 'lucide-react';
 import { initialMenu } from '../lib/seedData';
 import { useAuth } from '../context/AuthContext';
 import { AnimatePresence, motion } from 'framer-motion';
+import { isStoreOpen } from '../lib/openingHours';
 
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
   const { user } = useAuth();
   const { addItem } = useCart();
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'settings', 'company_info'), (snapshot) => {
+      if (snapshot.exists()) {
+        setCompanyInfo(snapshot.data() as CompanyInfo);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   const [pendingAdd, setPendingAdd] = useState<{
     product: Product;
@@ -43,6 +54,16 @@ export default function Home() {
     selectedSize?: '1 pedaço' | '2 pedaços', 
     totalPrice?: number
   ) => {
+    const status = isStoreOpen(companyInfo);
+    if (!status.isOpen && user?.role !== 'admin') {
+      setAlert({
+        type: 'warning',
+        message: 'Estamos Fechados',
+        submessage: status.reason
+      });
+      return;
+    }
+
     setPendingAdd({
       product,
       selectedOption,
@@ -53,6 +74,17 @@ export default function Home() {
 
   const handleConfirmAdd = () => {
     if (!pendingAdd) return;
+    const status = isStoreOpen(companyInfo);
+    if (!status.isOpen && user?.role !== 'admin') {
+      setAlert({
+        type: 'warning',
+        message: 'Estamos Fechados',
+        submessage: status.reason
+      });
+      setPendingAdd(null);
+      return;
+    }
+
     addItem({
       product: pendingAdd.product,
       quantity: 1,
@@ -111,6 +143,26 @@ export default function Home() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Friendly Closed Alert Banner */}
+      {(() => {
+        const status = isStoreOpen(companyInfo);
+        if (!status.isOpen) {
+          return (
+            <div className="mb-6 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 flex items-start gap-3 shadow-xs animate-pulse">
+              <div className="p-2 bg-amber-100 text-amber-700 rounded-lg shrink-0 mt-0.5">
+                <AlertCircle size={18} />
+              </div>
+              <div>
+                <h3 className="text-xs font-black uppercase tracking-wider text-amber-950">Aviso: Estabelecimento Fechado</h3>
+                <p className="text-xs font-bold mt-1 text-amber-800 leading-relaxed">{status.reason}</p>
+                <p className="text-[10px] uppercase font-black tracking-widest text-amber-600 mt-2">Você ainda pode navegar no cardápio, mas os pedidos estão suspensos no momento.</p>
+              </div>
+            </div>
+          );
+        }
+        return null;
+      })()}
+
       <div className="mb-6 bg-brand/10 p-4 rounded-xl border border-brand/20">
         <h1 className="text-xl font-black text-gray-900 mb-1 uppercase tracking-wider">Cardápio</h1>
         <p className="text-[10px] text-gray-700 uppercase tracking-widest font-bold">Todas as refeições acompanham arroz, feijão, macarrão e farofa.</p>

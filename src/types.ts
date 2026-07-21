@@ -74,6 +74,12 @@ export interface FinanceEntry {
   createdAt: number;
 }
 
+export interface DayHours {
+  isOpen: boolean;
+  openTime: string; // e.g. "11:00"
+  closeTime: string; // e.g. "23:00"
+}
+
 export interface CompanyInfo {
   name: string;
   phone: string;
@@ -81,5 +87,9 @@ export interface CompanyInfo {
   pixKey: string;
   pixKeyName: string;
   logoUrl?: string;
+  forceClosed?: boolean;
+  openingHours?: {
+    [key: string]: DayHours;
+  };
 }
 
