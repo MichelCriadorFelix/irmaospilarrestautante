@@ -581,6 +581,11 @@ export default function AdminDashboard() {
                         )}
                         <p className="text-[9px] text-gray-400 font-bold mt-1 uppercase tracking-wider">
                           {format(new Date(order.createdAt), 'dd/MM/yyyy HH:mm')} • {paymentMap[order.paymentMethod || 'pix']}
+                          {order.paymentMethod === 'cash' && order.changeRequested && (
+                            <span className="text-brand font-black ml-1">
+                              (Troco p/ {formatCurrency(order.changeFor || 0)})
+                            </span>
+                          )}
                         </p>
                       </div>
                     </div>

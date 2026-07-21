@@ -213,7 +213,8 @@ export default function OrderDetails() {
           try {
             // Tentativa de upload para o Storage usando o blob convertido localmente sem fetch
             const fileRef = ref(storage, `orders/${id}/receipts/${Date.now()}_${selectedImage.file.name}`);
-            const blob = base64ToBlob(compressedBase64);
+            const response = await fetch(compressedBase64);
+            const blob = await response.blob();
             const uploadResult = await uploadBytes(fileRef, blob);
             imageUrl = await getDownloadURL(uploadResult.ref);
           } catch (storageErr) {
@@ -286,33 +287,62 @@ export default function OrderDetails() {
   };
 
   const handleStatusChange = async (newStatus: Order['status']) => {
-    if (!id) return;
-    await updateDoc(doc(db, 'orders', id), { status: newStatus, updatedAt: Date.now() });
-    setOrder(prev => prev ? { ...prev, status: newStatus } : null);
+    if (!id || !order) return;
+    
+    // Prevent redundant clicks
+    if (order.status === newStatus) return;
 
-    // Enviar mensagem automática amigável no chat
-    let systemMessage = '';
-    if (newStatus === 'preparing') {
-      systemMessage = '🍳 Seu pedido foi aprovado e já está em preparação na nossa cozinha! Nosso prazo de preparo é de até 30 minutos. Logo seu pedido sairá quentinho para você!';
-    } else if (newStatus === 'delivering') {
-      systemMessage = '🚀 Boas notícias! Seu pedido foi finalizado e já saiu para entrega. Nosso prazo de entrega é de até 20 minutos!';
-    } else if (newStatus === 'completed') {
-      systemMessage = '🎉 Seu pedido foi entregue! Esperamos que aprecie cada pedaço. Muito obrigado pela preferência e bom apetite! 🍔🍟';
-    } else if (newStatus === 'cancelled') {
-      systemMessage = '⚠️ Seu pedido foi cancelado pelo estabelecimento. Caso tenha dúvidas ou precise de suporte, envie-nos uma mensagem por aqui.';
+    const statusLabels: Record<string, string> = {
+      preparing: 'Aprovar e Preparar',
+      delivering: 'Marcar como Em Entrega',
+      completed: 'Marcar como Concluído',
+      cancelled: 'Cancelar Pedido'
+    };
+
+    if (!window.confirm(`Deseja alterar o status para "${statusLabels[newStatus]}"?`)) {
+      return;
     }
 
-    if (systemMessage) {
-      try {
+    setUploading(true); // Reuse uploading state to prevent multiple clicks
+    try {
+      await updateDoc(doc(db, 'orders', id), { status: newStatus, updatedAt: Date.now() });
+      setOrder(prev => prev ? { ...prev, status: newStatus } : null);
+
+      // Enviar mensagem automática amigável no chat
+      let systemMessage = '';
+      if (newStatus === 'preparing') {
+        systemMessage = '🍳 Seu pedido foi aprovado e já está em preparação na nossa cozinha! Nosso prazo de preparo é de até 30 minutos. Logo seu pedido sairá quentinho para você!';
+      } else if (newStatus === 'delivering') {
+        systemMessage = '🚀 Boas notícias! Seu pedido foi finalizado e já saiu para entrega. Nosso prazo de entrega é de até 20 minutos!';
+      } else if (newStatus === 'completed') {
+        systemMessage = '🎉 Seu pedido foi entregue! Esperamos que aprecie cada pedaço. Muito obrigado pela preferência e bom apetite! 🍔🍟';
+      } else if (newStatus === 'cancelled') {
+        systemMessage = '⚠️ Seu pedido foi cancelado pelo estabelecimento. Caso tenha dúvidas ou precise de suporte, envie-nos uma mensagem por aqui.';
+      }
+
+      if (systemMessage) {
         await addDoc(collection(db, 'orders', id, 'messages'), {
           senderId: 'system',
           senderName: companyInfo.name || 'Estabelecimento',
           text: systemMessage,
           createdAt: Date.now()
         });
-      } catch (err) {
-        console.error('Erro ao enviar mensagem de status:', err);
       }
+      
+      setAlert({
+        type: 'success',
+        message: 'Status atualizado',
+        submessage: `O pedido agora está: ${statusMap[newStatus]}`
+      });
+    } catch (err) {
+      console.error('Erro ao atualizar status:', err);
+      setAlert({
+        type: 'error',
+        message: 'Erro ao atualizar',
+        submessage: 'Houve uma falha técnica ao mudar o status.'
+      });
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -450,7 +480,7 @@ export default function OrderDetails() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8 h-[calc(100vh-64px)] overflow-hidden">
+    <div className="max-w-6xl mx-auto px-4 py-4 md:py-8 grid grid-cols-1 lg:grid-cols-3 gap-8 lg:h-[calc(100vh-64px)] lg:overflow-hidden">
       
       {/* Left: Order Info */}
       <div className="lg:col-span-2 overflow-y-auto pr-4">
@@ -657,10 +687,34 @@ export default function OrderDetails() {
             <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mt-6">
               <h3 className="font-bold text-[10px] text-gray-500 mb-3 uppercase tracking-widest">Controles do Administrador</h3>
               <div className="flex flex-wrap gap-2">
-                <button onClick={() => handleStatusChange('preparing')} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-blue-700">Aprovar & Preparar</button>
-                <button onClick={() => handleStatusChange('delivering')} className="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-purple-700">Saiu p/ Entrega</button>
-                <button onClick={() => handleStatusChange('completed')} className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-green-700">Concluído</button>
-                <button onClick={() => handleStatusChange('cancelled')} className="bg-gray-800 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-gray-900">Cancelar</button>
+                <button 
+                  onClick={() => handleStatusChange('preparing')} 
+                  disabled={uploading || order.status === 'preparing'}
+                  className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Aprovar & Preparar
+                </button>
+                <button 
+                  onClick={() => handleStatusChange('delivering')} 
+                  disabled={uploading || order.status === 'delivering'}
+                  className="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Saiu p/ Entrega
+                </button>
+                <button 
+                  onClick={() => handleStatusChange('completed')} 
+                  disabled={uploading || order.status === 'completed'}
+                  className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Concluído
+                </button>
+                <button 
+                  onClick={() => handleStatusChange('cancelled')} 
+                  disabled={uploading || order.status === 'cancelled'}
+                  className="bg-gray-800 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancelar
+                </button>
               </div>
             </div>
           )}
@@ -720,12 +774,12 @@ export default function OrderDetails() {
       </div>
 
       {/* Right: Chat */}
-      <div className="bg-white shadow rounded-lg flex flex-col h-full border border-gray-200">
+      <div className="bg-white shadow rounded-lg flex flex-col h-[500px] lg:h-full border border-gray-200">
         <div className="p-4 border-b bg-gray-50 rounded-t-lg">
           <h3 className="font-bold text-gray-900">Chat & Comprovantes</h3>
         </div>
         
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 scrollbar-thin scrollbar-thumb-gray-200">
           {messages.map(msg => (
             <div key={msg.id} className={`flex flex-col ${msg.senderId === user?.uid ? 'items-end' : 'items-start'}`}>
               <div className={`max-w-[85%] rounded-xl p-3 shadow-sm ${
