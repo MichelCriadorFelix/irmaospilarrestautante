@@ -24,7 +24,7 @@ import {
 import { cn } from '../lib/utils';
 
 export default function Layout() {
-  const { user, loading, logoutMock } = useAuth();
+  const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { items } = useCart();
@@ -90,7 +90,7 @@ export default function Layout() {
   }
 
   const handleLogout = async () => {
-    logoutMock();
+    logout();
     navigate('/login');
   };
 

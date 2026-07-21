@@ -67,9 +67,10 @@ const paymentMap = {
 type PeriodType = 'day' | 'week' | 'month' | 'trimester' | 'semester' | 'year';
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'realtime' | 'history' | 'crm' | 'settings'>('realtime');
+  const [activeTab, setActiveTab] = useState<'realtime' | 'history' | 'crm' | 'settings' | 'users'>('realtime');
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [finances, setFinances] = useState<FinanceEntry[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [stats, setStats] = useState({ pending: 0, preparing: 0, todayTotal: 0 });
   
   // Settings Form State
@@ -282,10 +283,18 @@ export default function AdminDashboard() {
       handleFirestoreError(err, OperationType.LIST, 'orders');
     });
 
+    // Load All Users for Team Management
+    const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+      setUsers(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'users');
+    });
+
     return () => {
       unsubSettings();
       unsubFinances();
       unsubscribeOrders();
+      unsubUsers();
     };
   }, []);
 
@@ -469,6 +478,18 @@ export default function AdminDashboard() {
         >
           <Settings size={16} />
           <span>Dados da Empresa</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('users')}
+          className={`px-4 py-2.5 text-xs font-black uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 ${
+            activeTab === 'users' 
+              ? 'border-brand text-brand bg-brand/5' 
+              : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+          }`}
+        >
+          <ShieldAlert size={16} />
+          <span>Gerenciar Equipe</span>
         </button>
       </div>
 
@@ -921,6 +942,100 @@ export default function AdminDashboard() {
                   <span className="text-sm font-black text-gray-900 block mt-0.5">{formatCurrency(paymentBreakdown.cash)}</span>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: USER MANAGEMENT / TEAM */}
+      {activeTab === 'users' && (
+        <div className="space-y-6">
+          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+            <div className="p-4 bg-gray-50/70 border-b border-gray-200 flex justify-between items-center">
+              <div>
+                <h3 className="font-black text-xs text-gray-900 uppercase tracking-widest flex items-center gap-2">
+                  <ShieldAlert size={14} className="text-brand" /> Gerenciamento de Equipe
+                </h3>
+                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Defina quem pode acessar o painel administrativo</p>
+              </div>
+              <span className="text-[10px] bg-brand/10 text-brand px-2 py-0.5 rounded font-black uppercase">
+                {users.length} Usuários
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50/40 text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                    <th className="p-4">Nome / E-mail</th>
+                    <th className="p-4">Status de Acesso</th>
+                    <th className="p-4">Desde</th>
+                    <th className="p-4 text-center">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-xs font-medium text-gray-700">
+                  {users.sort((a, b) => b.role === 'admin' ? 1 : -1).map(u => (
+                    <tr key={u.id} className="hover:bg-gray-50/60 transition-colors">
+                      <td className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${u.role === 'admin' ? 'bg-brand text-white' : 'bg-gray-100 text-gray-400'}`}>
+                            {u.name?.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <span className="font-bold text-gray-900 block">{u.name}</span>
+                            <span className="text-[10px] text-gray-400 font-semibold">{u.email}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border tracking-wider ${
+                          u.role === 'admin' 
+                            ? 'bg-purple-100 text-purple-800 border-purple-200' 
+                            : 'bg-gray-100 text-gray-600 border-gray-200'
+                        }`}>
+                          {u.role === 'admin' ? 'Administrador' : 'Cliente / Usuário'}
+                        </span>
+                      </td>
+                      <td className="p-4 text-gray-400 text-[10px]">
+                        {u.createdAt ? format(new Date(u.createdAt), 'dd/MM/yyyy') : 'N/A'}
+                      </td>
+                      <td className="p-4 text-center">
+                        <button
+                          onClick={async () => {
+                            const newRole = u.role === 'admin' ? 'user' : 'admin';
+                            if (window.confirm(`Deseja alterar o cargo de ${u.name} para ${newRole}?`)) {
+                              try {
+                                await setDoc(doc(db, 'users', u.id), { role: newRole }, { merge: true });
+                              } catch (err) {
+                                handleFirestoreError(err, OperationType.UPDATE, `users/${u.id}`);
+                              }
+                            }
+                          }}
+                          className={`inline-flex items-center gap-1 px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-wider transition-colors ${
+                            u.role === 'admin'
+                              ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                              : 'bg-brand text-white hover:bg-brand-dark'
+                          }`}
+                        >
+                          {u.role === 'admin' ? <TrendingDown size={12} /> : <TrendingUp size={12} />}
+                          {u.role === 'admin' ? 'Remover Admin' : 'Tornar Admin'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          
+          <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl flex gap-3 items-start">
+            <ShieldAlert size={20} className="text-amber-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-black text-amber-900 uppercase tracking-tight">Dica de Segurança</p>
+              <p className="text-[10px] text-amber-800 font-semibold mt-1 leading-relaxed">
+                Administradores têm acesso total ao faturamento, histórico de clientes e configurações da empresa. 
+                Certifique-se de conceder este acesso apenas a pessoas de confiança da sua equipe.
+              </p>
             </div>
           </div>
         </div>

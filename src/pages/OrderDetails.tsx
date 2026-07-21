@@ -367,14 +367,12 @@ export default function OrderDetails() {
           ${!isKitchen ? `
           <div class="section">
             <div class="label">Cliente:</div>
-            <div>${order.customerName}</div>
-            <div class="label" style="margin-top: 5px;">Telefone:</div>
-            <div>${order.customerPhone}</div>
+            <div>${order.userName}</div>
           </div>
 
           <div class="section">
             <div class="label">Endereço de Entrega:</div>
-            <div>${order.customerAddress}</div>
+            <div>${order.address || 'Não informado'}</div>
           </div>
           ` : `
           <div class="section" style="text-align: center; background: #eee; padding: 5px;">
