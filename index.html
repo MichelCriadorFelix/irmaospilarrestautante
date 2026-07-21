@@ -4,33 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#ef4444" />
-    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icon-192.jpg" />
     <title>Irmãos Pilar</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      // Register Service Worker in production only (exclude localhost and AI Studio dev preview)
-      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      const isAiStudioDev = window.location.hostname.includes('ais-dev');
-      
-      if ('serviceWorker' in navigator && !isLocalhost && !isAiStudioDev) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then(reg => console.log('PWA Service Worker registered!', reg.scope))
-            .catch(err => console.error('Service Worker registration failed:', err));
-        });
-      } else if ('serviceWorker' in navigator && (isLocalhost || isAiStudioDev)) {
-        // Automatically unregister old service workers in development to prevent caching issues/white screens
-        navigator.serviceWorker.getRegistrations().then(registrations => {
-          for (let registration of registrations) {
-            registration.unregister();
-            console.log('Unregistered active service worker in development to avoid caching problems.');
-          }
-        });
-      }
-    </script>
   </body>
 </html>
 

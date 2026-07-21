@@ -436,7 +436,7 @@ export default function AdminDashboard() {
           }`}
         >
           <BellRing size={16} />
-          <span>Monitor Real-Time</span>
+          <span>Monitore em Tempo Real</span>
           {allOrders.filter(o => o.status !== 'completed' && o.status !== 'cancelled').length > 0 && (
             <span className="bg-brand text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold ml-1">
               {allOrders.filter(o => o.status !== 'completed' && o.status !== 'cancelled').length}
