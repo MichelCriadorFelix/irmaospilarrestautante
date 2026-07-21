@@ -437,10 +437,28 @@ export default function OrderDetails() {
 
           <div class="section">
             <div class="label">Pagamento:</div>
-            <div>${statusMap[order.status as keyof typeof statusMap] || order.status}</div>
+            <div style="font-weight: bold; margin-top: 2px;">
+              ${order.status === 'completed' || (order.paymentMethod === 'pix' && order.status !== 'pending_payment') 
+                ? 'PAGO' 
+                : 'AGUARDANDO PAGAMENTO'}
+            </div>
+            <div style="font-size: 0.9em; margin-top: 2px;">
+              FORMA: ${{
+                pix: 'PIX',
+                credit: 'CARTÃO DE CRÉDITO (NA ENTREGA)',
+                debit: 'CARTÃO DE DÉBITO (NA ENTREGA)',
+                cash: 'DINHEIRO'
+              }[order.paymentMethod] || order.paymentMethod.toUpperCase()}
+            </div>
+            ${order.paymentMethod === 'cash' && order.changeRequested ? `
+              <div style="font-weight: bold; color: black; margin-top: 2px; border: 1px solid black; padding: 2px; text-align: center;">
+                TROCO PARA: ${formatCurrency(order.changeFor || 0)}
+              </div>
+            ` : ''}
+            
             ${order.notes ? `
-              <div class="label" style="margin-top: 5px;">Observações:</div>
-              <div>${order.notes}</div>
+              <div class="label" style="margin-top: 8px;">Observações:</div>
+              <div style="font-size: 0.9em;">${order.notes}</div>
             ` : ''}
           </div>
           ` : ''}
