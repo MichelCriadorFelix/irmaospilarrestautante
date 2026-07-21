@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { doc, updateDoc, collection, query, orderBy, onSnapshot, addDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../lib/firebase';
@@ -7,7 +7,7 @@ import { Order, ChatMessage } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { formatCurrency } from '../lib/utils';
 import { format } from 'date-fns';
-import { Send, Upload, Copy, Check, CreditCard, ChefHat, Truck, CheckCircle, XCircle, Clock, AlertCircle, Printer } from 'lucide-react';
+import { Send, Upload, Copy, Check, CreditCard, ChefHat, Truck, CheckCircle, XCircle, Clock, AlertCircle, Printer, ChevronLeft } from 'lucide-react';
 import { playNotificationSound } from '../lib/audio';
 import { AnimatePresence, motion } from 'framer-motion';
 
@@ -45,6 +45,7 @@ const getStepsForOrder = (order: Order | null) => {
 
 export default function OrderDetails() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [order, setOrder] = useState<Order | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -60,7 +61,7 @@ export default function OrderDetails() {
     pixKey: "12.345.678/0001-90",
     pixKeyName: "Irmãos Pilar Ltda"
   });
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -118,7 +119,14 @@ export default function OrderDetails() {
     const q = query(collection(db, 'orders', id, 'messages'), orderBy('createdAt', 'asc'));
     const unsubscribeMessages = onSnapshot(q, (snapshot) => {
       setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatMessage)));
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      setTimeout(() => {
+        if (chatContainerRef.current) {
+          chatContainerRef.current.scrollTo({
+            top: chatContainerRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+      }, 100);
 
       // Only play sound if message was added by someone else and is fresh (last 10 seconds)
       snapshot.docChanges().forEach((change) => {
@@ -506,6 +514,13 @@ export default function OrderDetails() {
           <div className="flex justify-between items-start mb-6 border-b border-gray-100 pb-4">
             <div>
               <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => navigate(-1)} 
+                  className="p-1.5 mr-1 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
+                  title="Voltar"
+                >
+                  <ChevronLeft size={20} />
+                </button>
                 <h1 className="text-xl font-black text-gray-900 mb-0.5 uppercase tracking-wider">Pedido #{order.id.slice(-6).toUpperCase()}</h1>
                 {isAdmin && (
                   <button 
@@ -797,7 +812,7 @@ export default function OrderDetails() {
           <h3 className="font-bold text-gray-900">Chat & Comprovantes</h3>
         </div>
         
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 scrollbar-thin scrollbar-thumb-gray-200">
+        <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 scrollbar-thin scrollbar-thumb-gray-200">
           {messages.map(msg => (
             <div key={msg.id} className={`flex flex-col ${msg.senderId === user?.uid ? 'items-end' : 'items-start'}`}>
               <div className={`max-w-[85%] rounded-xl p-3 shadow-sm ${
@@ -814,7 +829,6 @@ export default function OrderDetails() {
               <span className="text-[9px] font-bold uppercase text-gray-400 mt-1">{format(new Date(msg.createdAt), 'HH:mm')}</span>
             </div>
           ))}
-          <div ref={messagesEndRef} />
         </div>
 
         <div className="p-3 border-t bg-white rounded-b-xl space-y-2">

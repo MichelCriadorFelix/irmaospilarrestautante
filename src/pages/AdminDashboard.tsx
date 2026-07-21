@@ -5,7 +5,7 @@ import { db, storage, sanitizeForFirestore, handleFirestoreError, OperationType 
 import { Order, FinanceEntry, CompanyInfo } from '../types';
 import { formatCurrency } from '../lib/utils';
 import { format, subDays } from 'date-fns';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { 
   BellRing, 
@@ -67,7 +67,9 @@ const paymentMap = {
 type PeriodType = 'day' | 'week' | 'month' | 'trimester' | 'semester' | 'year';
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'realtime' | 'history' | 'crm' | 'settings' | 'users'>('realtime');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = (searchParams.get('tab') as 'realtime' | 'history' | 'crm' | 'settings' | 'users') || 'realtime';
+  const setActiveTab = (tab: 'realtime' | 'history' | 'crm' | 'settings' | 'users') => setSearchParams({ tab });
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [finances, setFinances] = useState<FinanceEntry[]>([]);
   const [users, setUsers] = useState<any[]>([]);
