@@ -70,18 +70,28 @@ export default function Layout() {
     };
   }, []);
 
-  const handleInstallClick = () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      deferredPrompt.userChoice.then((choiceResult: { outcome: string }) => {
+  const handleInstallClick = async () => {
+    const promptEvent = (window as any).deferredPrompt || deferredPrompt;
+    
+    if (promptEvent) {
+      promptEvent.prompt();
+      try {
+        const choiceResult = await promptEvent.userChoice;
         if (choiceResult.outcome === 'accepted') {
           console.log('User accepted the install prompt');
         }
-        setDeferredPrompt(null);
-      });
+      } catch (e) {
+        console.error(e);
+      }
+      (window as any).deferredPrompt = null;
+      setDeferredPrompt(null);
     } else {
-      // Trigger user manual installation help modal
-      setShowInstallModal(true);
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (isIOS) {
+        setShowInstallModal(true);
+      } else {
+        alert('A instalação automática ainda está sendo preparada pelo seu navegador. Tente novamente em alguns segundos ou use o menu do navegador ("Adicionar à tela inicial").');
+      }
     }
   };
 
@@ -257,34 +267,21 @@ export default function Layout() {
               </p>
 
               <div className="space-y-4">
-                {/* Option 1: iOS */}
+                {/* iOS Instructions */}
                 <div className="border border-amber-100 bg-amber-50/50 rounded-xl p-3.5 space-y-2.5">
                   <div className="flex items-center gap-2 text-amber-900 font-bold">
                     <Smartphone size={16} className="text-amber-600" />
-                    <span>No iPhone / iPad (iOS Safari)</span>
+                    <span>No iPhone / iPad (Safari)</span>
                   </div>
                   <ol className="list-decimal list-inside space-y-1.5 text-amber-800 font-medium">
                     <li>Abra o link do aplicativo no navegador <strong className="font-bold">Safari</strong>.</li>
                     <li className="inline-flex items-center gap-1 flex-wrap">
-                      Toque no botão de <strong className="font-bold flex items-center gap-1 bg-white border border-gray-200 px-1.5 py-0.5 rounded shadow-sm text-gray-700 text-[10px]"><Share2 size={10} /> Compartilhar</strong> na barra do Safari.
+                      Toque no botão de <strong className="font-bold flex items-center gap-1 bg-white border border-gray-200 px-1.5 py-0.5 rounded shadow-sm text-gray-700 text-[10px]"><Share2 size={10} /> Compartilhar</strong> na barra.
                     </li>
                     <li className="inline-flex items-center gap-1 flex-wrap">
                       Selecione a opção <strong className="font-bold flex items-center gap-1 bg-white border border-gray-200 px-1.5 py-0.5 rounded shadow-sm text-gray-700 text-[10px]"><PlusSquare size={10} /> Adicionar à Tela de Início</strong>.
                     </li>
                     <li>Toque em <strong className="font-bold text-brand">Adicionar</strong> no canto superior direito para concluir!</li>
-                  </ol>
-                </div>
-
-                {/* Option 2: Android & Desktop */}
-                <div className="border border-blue-100 bg-blue-50/50 rounded-xl p-3.5 space-y-2.5">
-                  <div className="flex items-center gap-2 text-blue-900 font-bold">
-                    <Smartphone size={16} className="text-blue-600" />
-                    <span>No Android, Chrome ou Windows</span>
-                  </div>
-                  <ol className="list-decimal list-inside space-y-1.5 text-blue-800 font-medium">
-                    <li>Abra o menu de opções do navegador (três pontos no canto superior/inferior).</li>
-                    <li>Toque em <strong className="font-bold">"Instalar aplicativo"</strong> ou <strong className="font-bold">"Adicionar à Tela inicial"</strong>.</li>
-                    <li>Confirme a instalação no diálogo pop-up que aparece.</li>
                   </ol>
                 </div>
               </div>
