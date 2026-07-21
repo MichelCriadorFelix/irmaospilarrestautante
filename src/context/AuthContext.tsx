@@ -25,6 +25,7 @@ interface AuthContextType {
   updateUser: (data: Partial<User>) => Promise<void>;
   resendVerification: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({ 
@@ -36,7 +37,8 @@ const AuthContext = createContext<AuthContextType>({
   logout: () => {}, 
   updateUser: async () => {},
   resendVerification: async () => {},
-  resetPassword: async () => {}
+  resetPassword: async () => {},
+  refreshUser: async () => {}
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -128,6 +130,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const resetPassword = async (email: string) => {
     await sendPasswordResetEmail(auth, email);
   };
+  
+  const refreshUser = async () => {
+    if (auth.currentUser) {
+      await auth.currentUser.reload();
+      await syncUserFromFirestore(auth.currentUser);
+    }
+  };
 
   const logout = () => {
     signOut(auth).catch(err => console.error('Error signing out:', err));
@@ -172,7 +181,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       logout, 
       updateUser,
       resendVerification,
-      resetPassword
+      resetPassword,
+      refreshUser
     }}>
       {children}
     </AuthContext.Provider>

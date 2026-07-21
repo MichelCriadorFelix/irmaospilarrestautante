@@ -7,7 +7,7 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 export default function Login() {
-  const { loginWithEmail, registerWithEmail, resendVerification, resetPassword, user, logout } = useAuth();
+  const { loginWithEmail, registerWithEmail, resendVerification, resetPassword, refreshUser, user, logout } = useAuth();
   const [isRegister, setIsRegister] = useState(false);
   const [isForgot, setIsForgot] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -70,8 +70,7 @@ export default function Login() {
       if (err.code === 'auth/user-not-found') message = 'Usuário não encontrado.';
       else if (err.code === 'auth/wrong-password') message = 'Senha incorreta.';
       else if (err.code === 'auth/email-already-in-use') {
-        message = 'Este e-mail já possui uma conta. Tente fazer login ou recuperar sua senha.';
-        // Auto switch to login if they prefer
+        message = 'Este e-mail já possui uma conta ativa. Tente fazer Login ou use a Recuperação de Senha se esqueceu a sua.';
       }
       else if (err.code === 'auth/invalid-email') message = 'E-mail inválido.';
       else if (err.code === 'auth/weak-password') message = 'A senha deve ter pelo menos 6 caracteres.';
@@ -89,6 +88,17 @@ export default function Login() {
       setSuccess('E-mail de verificação reenviado!');
     } catch (err) {
       setError('Erro ao reenviar e-mail.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCheckVerification = async () => {
+    setLoading(true);
+    try {
+      await refreshUser();
+    } catch (err) {
+      setError('Erro ao atualizar status.');
     } finally {
       setLoading(false);
     }
@@ -122,11 +132,19 @@ export default function Login() {
 
           <div className="space-y-3">
             <button
+              onClick={handleCheckVerification}
+              disabled={loading}
+              className="w-full bg-green-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-green-700 transition-all shadow-lg active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {loading ? <Loader2 className="animate-spin" size={18} /> : 'Já confirmei no meu e-mail'}
+            </button>
+
+            <button
               onClick={handleResend}
               disabled={loading}
               className="w-full bg-brand text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-brand-dark transition-all shadow-lg active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {loading ? <Loader2 className="animate-spin" size={18} /> : 'Reenviar E-mail'}
+              {loading ? <Loader2 className="animate-spin" size={18} /> : 'Reenviar Link de Confirmação'}
             </button>
             
             <button
