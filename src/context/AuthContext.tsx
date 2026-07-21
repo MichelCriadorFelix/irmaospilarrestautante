@@ -51,12 +51,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const userSnap = await getDoc(userRef);
 
     let userData: User;
+    const email = firebaseUser.email || '';
+    const isOwner = email === 'michelgeminicriador@gmail.com' || email === 'felixcastroadv@gmail.com';
+
     if (userSnap.exists()) {
-      userData = { ...userSnap.data(), uid: firebaseUser.uid, email: firebaseUser.email || '' } as User;
+      userData = { 
+        ...userSnap.data(), 
+        uid: firebaseUser.uid, 
+        email: email,
+        role: isOwner ? 'admin' : (userSnap.data().role || 'user')
+      } as User;
     } else {
       // Default to 'user' role unless email contains 'admin' or is a known owner
-      const email = firebaseUser.email || '';
-      const role = (email.includes('admin') || email === 'michelgeminicriador@gmail.com' || email === 'felixcastroadv@gmail.com') ? 'admin' : 'user';
+      const role = (email.includes('admin') || isOwner) ? 'admin' : 'user';
       userData = {
         uid: firebaseUser.uid,
         email: email,
