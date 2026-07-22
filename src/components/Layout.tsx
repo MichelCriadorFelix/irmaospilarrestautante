@@ -22,12 +22,15 @@ import {
   Laptop
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useExitGuard } from '../hooks/useExitGuard';
 
 export default function Layout() {
   const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { items } = useCart();
+  const isAdmin = user?.role === 'admin';
+  useExitGuard(isAdmin ? '/admin' : '/');
   const [deferredPrompt, setDeferredPrompt] = useState<any>(() => (window as any).deferredPrompt || null);
   const [isStandalone, setIsStandalone] = useState(false);
   const [showInstallBanner, setShowInstallBanner] = useState(true);
@@ -131,8 +134,6 @@ export default function Layout() {
     logout();
     navigate('/login');
   };
-
-  const isAdmin = user?.role === 'admin';
 
   return (
     <div className="flex flex-col min-h-[100dvh]">
