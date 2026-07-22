@@ -30,7 +30,6 @@ export default function Layout() {
   const { items } = useCart();
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isStandalone, setIsStandalone] = useState(false);
-  const [showInstallModal, setShowInstallModal] = useState(false);
   const [companyInfo, setCompanyInfo] = useState<{ name: string; logoUrl?: string }>({
     name: "Irmãos Pilar"
   });
@@ -85,8 +84,6 @@ export default function Layout() {
       }
       (window as any).deferredPrompt = null;
       setDeferredPrompt(null);
-    } else {
-      setShowInstallModal(true);
     }
   };
 
@@ -120,7 +117,7 @@ export default function Layout() {
         </div>
         
         <div className="flex items-center space-x-3">
-          {!isStandalone && (
+          {(!isStandalone && ((window as any).deferredPrompt || deferredPrompt)) && (
             <button onClick={handleInstallClick} className="p-1.5 text-gray-400 hover:text-white transition-colors" title="Instalar App">
               <Download size={18} className="animate-bounce-slow" />
             </button>
@@ -182,7 +179,7 @@ export default function Layout() {
         {/* Desktop Install / Logout footer */}
         {user && (
           <div className="p-4 border-t border-gray-800">
-            {!isStandalone && (
+            {(!isStandalone && ((window as any).deferredPrompt || deferredPrompt)) && (
               <button 
                 onClick={handleInstallClick}
                 className="w-full flex items-center justify-center space-x-2 px-3 py-2 mb-3 rounded-lg bg-brand hover:bg-brand-dark transition-colors"
@@ -231,81 +228,10 @@ export default function Layout() {
           )}
         </nav>
       )}
-
-      {/* Main Content Area */}
+        {/* Main Content Area */}
       <main className="flex-1 w-full relative pb-20 md:pb-0">
         <Outlet />
       </main>
-
-      {/* PWA INSTALLATION INSTRUCTIONAL MODAL */}
-      {showInstallModal && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-[999] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 max-w-md w-full overflow-hidden text-gray-800 animate-fade-in">
-            {/* Modal Header */}
-            <div className="p-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Download size={18} className="text-brand" />
-                <h3 className="font-black text-xs uppercase tracking-widest text-gray-900">Como Instalar o Aplicativo</h3>
-              </div>
-              <button 
-                onClick={() => setShowInstallModal(false)}
-                className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-6 space-y-5 text-xs">
-              <p className="text-gray-500 font-medium leading-relaxed">
-                Instale nosso aplicativo em sua tela inicial para um acesso super rápido, melhor desempenho e acompanhamento em tempo real dos seus pedidos!
-              </p>
-
-              <div className="space-y-4">
-                {/* General/Android Instructions */}
-                <div className="border border-blue-100 bg-blue-50/50 rounded-xl p-3.5 space-y-2.5">
-                  <div className="flex items-center gap-2 text-blue-900 font-bold">
-                    <Download size={16} className="text-blue-600" />
-                    <span>Android / Chrome / Edge</span>
-                  </div>
-                  <ol className="list-decimal list-inside space-y-1.5 text-blue-800 font-medium">
-                    <li>Abra o menu do navegador (ícone de 3 pontos no canto superior direito).</li>
-                    <li>Toque em <strong className="font-bold">"Instalar aplicativo"</strong> ou <strong className="font-bold">"Adicionar à Tela inicial"</strong>.</li>
-                    <li>Confirme a instalação no botão Instalar.</li>
-                  </ol>
-                </div>
-
-                {/* iOS Instructions */}
-                <div className="border border-amber-100 bg-amber-50/50 rounded-xl p-3.5 space-y-2.5">
-                  <div className="flex items-center gap-2 text-amber-900 font-bold">
-                    <Smartphone size={16} className="text-amber-600" />
-                    <span>iPhone / iPad (Safari)</span>
-                  </div>
-                  <ol className="list-decimal list-inside space-y-1.5 text-amber-800 font-medium">
-                    <li>Abra o link do aplicativo no navegador <strong className="font-bold">Safari</strong>.</li>
-                    <li className="inline-flex items-center gap-1 flex-wrap">
-                      Toque no botão de <strong className="font-bold flex items-center gap-1 bg-white border border-gray-200 px-1.5 py-0.5 rounded shadow-sm text-gray-700 text-[10px]"><Share2 size={10} /> Compartilhar</strong> na barra.
-                    </li>
-                    <li className="inline-flex items-center gap-1 flex-wrap">
-                      Selecione a opção <strong className="font-bold flex items-center gap-1 bg-white border border-gray-200 px-1.5 py-0.5 rounded shadow-sm text-gray-700 text-[10px]"><PlusSquare size={10} /> Adicionar à Tela de Início</strong>.
-                    </li>
-                    <li>Toque em <strong className="font-bold text-brand">Adicionar</strong> no canto superior direito para concluir!</li>
-                  </ol>
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-2 border-t border-gray-100">
-                <button
-                  onClick={() => setShowInstallModal(false)}
-                  className="px-4 py-2 bg-brand text-white font-bold uppercase tracking-wider text-[10px] rounded-lg hover:bg-brand-dark transition-all active:scale-95 shadow-sm"
-                >
-                  Entendi!
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -220,19 +220,28 @@ export default function OrderDetails() {
     if (!newMessage.trim() && !selectedImage) return;
     if (!user || !id) return;
     
+    const textToSend = newMessage.trim();
+    const imageToUpload = selectedImage;
+
+    // Limpa os campos do formulário IMEDIATAMENTE para a UI ficar livre e responsiva
+    setNewMessage('');
+    if (selectedImage) {
+      URL.revokeObjectURL(selectedImage.previewUrl);
+      setSelectedImage(null);
+    }
+    
     setUploading(true);
     try {
       let imageUrl = '';
       
-      if (selectedImage) {
+      if (imageToUpload) {
         try {
-          const compressedBase64 = await compressImage(selectedImage.file);
+          const compressedBase64 = await compressImage(imageToUpload.file);
           
           try {
-            // Tentativa de upload para o Storage usando o blob convertido localmente sem fetch
-            const fileRef = ref(storage, `orders/${id}/receipts/${Date.now()}_${selectedImage.file.name}`);
-            const response = await fetch(compressedBase64);
-            const blob = await response.blob();
+            // Tentativa de upload para o Storage usando o blob convertido localmente
+            const fileRef = ref(storage, `orders/${id}/receipts/${Date.now()}_${imageToUpload.file.name}`);
+            const blob = base64ToBlob(compressedBase64);
             const uploadResult = await uploadBytes(fileRef, blob);
             imageUrl = await getDownloadURL(uploadResult.ref);
           } catch (storageErr) {
@@ -251,14 +260,6 @@ export default function OrderDetails() {
         }
       }
 
-      const textToSend = newMessage.trim();
-
-      // Limpa os campos do formulário IMEDIATAMENTE para a UI ficar livre e responsiva
-      setNewMessage('');
-      if (selectedImage) {
-        URL.revokeObjectURL(selectedImage.previewUrl);
-        setSelectedImage(null);
-      }
       setUploading(false);
 
       // Salva no banco de forma assíncrona (Firestore gerencia fila offline se houver queda)
@@ -894,9 +895,8 @@ export default function OrderDetails() {
             <input
               type="text"
               value={newMessage}
-              disabled={uploading}
               onChange={e => setNewMessage(e.target.value)}
-              placeholder={uploading ? "Aguarde o envio..." : "Digite uma mensagem..."}
+              placeholder="Digite uma mensagem..."
               className="flex-1 border border-gray-200 focus:border-brand focus:ring-brand bg-gray-50 rounded-lg px-3 py-2 text-sm"
             />
             <button 
