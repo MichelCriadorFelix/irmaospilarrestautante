@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { collection, query, orderBy, onSnapshot, where, doc, setDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+
 import { db, storage, sanitizeForFirestore, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Order, FinanceEntry, CompanyInfo } from '../types';
 import { formatCurrency } from '../lib/utils';
@@ -158,20 +158,7 @@ export default function AdminDashboard() {
     setUploadingLogo(true);
     try {
       const compressedBase64 = await compressLogo(file);
-
-      let logoUrl = '';
-      try {
-        // Try Firebase Storage first
-        const logoRef = ref(storage, `settings/logo_${Date.now()}_${file.name}`);
-        const blob = base64ToBlob(compressedBase64);
-        const uploadResult = await uploadBytes(logoRef, blob);
-        logoUrl = await getDownloadURL(uploadResult.ref);
-      } catch (storageErr) {
-        console.warn('Firebase Storage error for logo, using base64 fallback:', storageErr);
-        logoUrl = compressedBase64;
-      }
-
-      setCompanyInfo(prev => ({ ...prev, logoUrl }));
+      setCompanyInfo(prev => ({ ...prev, logoUrl: compressedBase64 }));
     } catch (err) {
       console.error('Error uploading logo:', err);
       alert('Erro ao enviar a logomarca.');

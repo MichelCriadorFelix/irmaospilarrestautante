@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, updateDoc, collection, query, orderBy, onSnapshot, addDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+
 import { db, storage } from '../lib/firebase';
 import { Order, ChatMessage } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -237,17 +237,7 @@ export default function OrderDetails() {
         
         if (imageToUpload) {
           try {
-            const compressedBase64 = await compressImage(imageToUpload.file);
-            
-            try {
-              const fileRef = ref(storage, `orders/${id}/receipts/${Date.now()}_${imageToUpload.file.name}`);
-              const blob = base64ToBlob(compressedBase64);
-              const uploadResult = await uploadBytes(fileRef, blob);
-              imageUrl = await getDownloadURL(uploadResult.ref);
-            } catch (storageErr) {
-              console.warn('Error uploading to Firebase Storage, fallback to compressed Base64:', storageErr);
-              imageUrl = compressedBase64;
-            }
+            imageUrl = await compressImage(imageToUpload.file);
           } catch (compErr) {
             console.error('Error compressing image:', compErr);
             setAlert({

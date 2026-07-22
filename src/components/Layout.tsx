@@ -32,6 +32,7 @@ export default function Layout() {
   const [isStandalone, setIsStandalone] = useState(false);
   const [showInstallBanner, setShowInstallBanner] = useState(true);
   const [showIosInstructions, setShowIosInstructions] = useState(false);
+  const [showAndroidInstructions, setShowAndroidInstructions] = useState(false);
   const [logoError, setLogoError] = useState(false);
   const [companyInfo, setCompanyInfo] = useState<{ name: string; logoUrl?: string }>({
     name: "Irmãos Pilar"
@@ -100,8 +101,10 @@ export default function Layout() {
       setDeferredPrompt(null);
     } else if (isIos()) {
       setShowIosInstructions(true);
+    } else if (isAndroid()) {
+      setShowAndroidInstructions(true);
     } else {
-      alert('Seu navegador não suporta instalação direta ou o app já está instalado.');
+      alert('Para instalar no computador, clique no ícone de instalação (monitor com seta) na barra de endereços do Chrome ou Edge, próximo ao ícone de favoritos.');
     }
   };
 
@@ -147,6 +150,49 @@ export default function Layout() {
         </div>
       )}
       
+      
+      {/* ANDROID INSTRUCTIONS MODAL */}
+      {showAndroidInstructions && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowAndroidInstructions(false)}>
+          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl relative animate-fade-in" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setShowAndroidInstructions(false)} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 bg-gray-100 rounded-full">
+              <X size={20} />
+            </button>
+            
+            <div className="w-16 h-16 bg-brand/10 rounded-2xl flex items-center justify-center mb-6 mx-auto">
+              <Smartphone size={32} className="text-brand" />
+            </div>
+            
+            <h3 className="text-center font-black text-lg text-gray-900 mb-2 uppercase tracking-wide">Instalar no Android</h3>
+            <p className="text-center text-sm text-gray-500 font-medium mb-8">Para instalar nosso app, siga os passos no seu navegador Chrome:</p>
+            
+            <div className="space-y-4">
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 font-black text-gray-600 text-sm">1</div>
+                <div>
+                  <p className="text-sm text-gray-800 font-bold">Abra o Menu</p>
+                  <p className="text-xs text-gray-500 mt-1">Toque nos três pontinhos (⋮) no canto superior direito do Chrome.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 font-black text-gray-600 text-sm">2</div>
+                <div>
+                  <p className="text-sm text-gray-800 font-bold">Instalar Aplicativo</p>
+                  <p className="text-xs text-gray-500 mt-1">Selecione "Instalar aplicativo" ou "Adicionar à tela inicial" na lista.</p>
+                </div>
+              </div>
+            </div>
+            
+            <button 
+              onClick={() => setShowAndroidInstructions(false)}
+              className="w-full bg-brand text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs mt-8 hover:bg-brand-dark transition-colors"
+            >
+              Entendi
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* IOS INSTRUCTIONS MODAL */}
       {showIosInstructions && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowIosInstructions(false)}>
