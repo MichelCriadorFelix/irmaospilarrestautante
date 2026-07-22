@@ -13,6 +13,23 @@
       window.__VERCEL_TOOLBAR_DISABLED__ = true;
       window.VERCEL_SPEED_INSIGHTS_DISABLED = true;
       window.__VERCEL_SPEED_INSIGHTS_DISABLED__ = true;
+
+      // Capture PWA Install Prompt EARLIEST possible
+      window.deferredPrompt = null;
+      window.addEventListener('beforeinstallprompt', (e) => {
+        console.log('PWA: beforeinstallprompt event fired and captured');
+        // Prevent the mini-infobar from appearing on mobile
+        e.preventDefault();
+        // Stash the event so it can be triggered later.
+        window.deferredPrompt = e;
+        // Dispatch a custom event for React components that are already loaded
+        window.dispatchEvent(new CustomEvent('pwa-prompt-available', { detail: e }));
+      });
+
+      window.addEventListener('appinstalled', (evt) => {
+        console.log('PWA: Application installed');
+        window.deferredPrompt = null;
+      });
     </script>
   </head>
   <body>

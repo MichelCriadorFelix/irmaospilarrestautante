@@ -108,26 +108,31 @@ export default function Layout() {
   };
   
   const handleInstallClick = async () => {
+    // Try to get prompt from various sources
     const promptToUse = deferredPrompt || (window as any).deferredPrompt;
 
     if (promptToUse) {
-      console.log('Triggering native install prompt...');
+      console.log('PWA: Triggering native install prompt...');
       try {
         await promptToUse.prompt();
         const choiceResult = await promptToUse.userChoice;
-        console.log(`User response: ${choiceResult.outcome}`);
+        console.log(`PWA: User response: ${choiceResult.outcome}`);
+        
         if (choiceResult.outcome === 'accepted') {
           setShowInstallBanner(false);
           setDeferredPrompt(null);
           (window as any).deferredPrompt = null;
         }
       } catch (e) {
-        console.error('Error triggering prompt:', e);
-        setShowDesktopInstructions(true);
+        console.error('PWA: Error triggering prompt:', e);
+        // Fallback to manual if something goes wrong
+        if (isIos()) setShowIosInstructions(true);
+        else setShowDesktopInstructions(true);
       }
     } else if (isIos()) {
       setShowIosInstructions(true);
     } else {
+      console.log('PWA: No prompt available, showing manual instructions');
       setShowDesktopInstructions(true);
     }
   };
