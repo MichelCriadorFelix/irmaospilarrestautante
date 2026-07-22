@@ -118,6 +118,8 @@ export default function Layout() {
       }
     } else if (isIos()) {
       setShowIosInstructions(true);
+    } else {
+      alert("Para instalar, você também pode clicar no ícone de instalar (⊕) na barra de endereços do seu navegador.");
     }
   };
 
@@ -131,30 +133,33 @@ export default function Layout() {
   };
 
   const isAdmin = user?.role === 'admin';
-  const canInstall = Boolean(deferredPrompt) || isIos();
 
   return (
     <div className="flex flex-col min-h-[100dvh]">
-      {/* GLOBAL INSTALL BANNER - Only shown when native install prompt is ready or on iOS */}
-      {user && !isStandalone && showInstallBanner && canInstall && (
-        <div className="bg-brand text-white px-4 py-2.5 flex items-center justify-between shadow-md z-50 sticky top-0 w-full">
+      {/* GLOBAL INSTALL BANNER - Displayed whenever app is accessed via web browser */}
+      {user && !isStandalone && showInstallBanner && (
+        <div className="bg-brand text-white px-4 py-2.5 flex items-center justify-between shadow-md z-50 sticky top-0 w-full animate-fade-in">
           <div className="flex items-center gap-3">
-            <div className="bg-white/20 p-1.5 rounded-lg">
+            <div className="bg-white/20 p-1.5 rounded-lg shrink-0">
               <Download size={18} className="animate-bounce" />
             </div>
             <div>
               <p className="text-[11px] font-black uppercase tracking-wider leading-tight">Instale nosso App!</p>
-              <p className="text-[9px] text-white/80 font-medium">Mais rápido e direto na sua tela inicial.</p>
+              <p className="text-[9px] text-white/80 font-medium">Acesso rápido e direto na sua tela inicial.</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button 
               onClick={handleInstallClick}
-              className="bg-white text-brand px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-widest hover:bg-gray-100 transition-colors shadow-sm cursor-pointer"
+              className="bg-white text-brand px-3.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-widest hover:bg-gray-100 transition-all shadow-sm cursor-pointer active:scale-95"
             >
               Instalar
             </button>
-            <button onClick={() => setShowInstallBanner(false)} className="p-1 text-white/60 hover:text-white transition-colors">
+            <button 
+              onClick={() => setShowInstallBanner(false)} 
+              className="p-1 text-white/60 hover:text-white transition-colors cursor-pointer"
+              title="Fechar"
+            >
               <X size={16} />
             </button>
           </div>
