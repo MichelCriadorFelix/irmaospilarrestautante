@@ -11,32 +11,43 @@ export default defineConfig(() => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
+        injectRegister: 'script',
         includeAssets: ['favicon.ico', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'],
         manifest: {
           id: '/',
           name: 'Irmãos Pilar',
           short_name: 'Irmãos Pilar',
-          description: 'Sistema de Gestão - Bar e Restaurante Irmãos Pilar',
+          description: 'Bar e Restaurante Irmãos Pilar',
           theme_color: '#ef4444',
           background_color: '#ffffff',
           display: 'standalone',
-          display_override: ['window-controls-overlay', 'standalone', 'minimal-ui'],
           orientation: 'portrait',
           start_url: '/',
           scope: '/',
-          prefer_related_applications: false,
           icons: [
             {
               src: '/icon-192.png',
               sizes: '192x192',
               type: 'image/png',
-              purpose: 'any maskable'
+              purpose: 'any'
+            },
+            {
+              src: '/icon-192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'maskable'
             },
             {
               src: '/icon-512.png',
               sizes: '512x512',
               type: 'image/png',
-              purpose: 'any maskable'
+              purpose: 'any'
+            },
+            {
+              src: '/icon-512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable'
             }
           ],
           shortcuts: [

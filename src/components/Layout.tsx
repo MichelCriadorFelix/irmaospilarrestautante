@@ -119,7 +119,7 @@ export default function Layout() {
     } else if (isIos()) {
       setShowIosInstructions(true);
     } else {
-      alert("Para instalar, você também pode clicar no ícone de instalar (⊕) na barra de endereços do seu navegador.");
+      console.log('PWA: Native install prompt not ready yet or browser manages installation natively.');
     }
   };
 
