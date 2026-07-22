@@ -32,8 +32,6 @@ export default function Layout() {
   const [isStandalone, setIsStandalone] = useState(false);
   const [showInstallBanner, setShowInstallBanner] = useState(true);
   const [showIosInstructions, setShowIosInstructions] = useState(false);
-  const [showAndroidInstructions, setShowAndroidInstructions] = useState(false);
-  const [showDesktopInstructions, setShowDesktopInstructions] = useState(false);
   const [logoError, setLogoError] = useState(false);
   const [companyInfo, setCompanyInfo] = useState<{ name: string; logoUrl?: string }>({
     name: "Irmãos Pilar"
@@ -98,9 +96,11 @@ export default function Layout() {
   };
   
   const handleInstallClick = async () => {
+    // Tenta pegar o evento do window (capturado no main.tsx) ou do estado local
     const promptEvent = (window as any).deferredPrompt || deferredPrompt;
     
     if (promptEvent) {
+      console.log('Triggering native install prompt...');
       promptEvent.prompt();
       try {
         const choiceResult = await promptEvent.userChoice;
@@ -109,16 +109,18 @@ export default function Layout() {
           setShowInstallBanner(false);
         }
       } catch (e) {
-        console.error(e);
+        console.error('Error during installation choice:', e);
       }
+      // Limpa após o uso
       (window as any).deferredPrompt = null;
       setDeferredPrompt(null);
     } else if (isIos()) {
+      // iOS ainda precisa de tutorial pois não suporta o evento beforeinstallprompt
       setShowIosInstructions(true);
-    } else if (isAndroid()) {
-      setShowAndroidInstructions(true);
     } else {
-      setShowDesktopInstructions(true);
+      // Se não houver evento e não for iOS, o navegador provavelmente 
+      // já mostrou o ícone na barra de endereços ou o app já está instalado.
+      alert('Use o ícone de instalação na barra de endereços do seu navegador ou o menu (Instalar Aplicativo).');
     }
   };
 
@@ -165,90 +167,6 @@ export default function Layout() {
       )}
       
       
-      {/* DESKTOP INSTRUCTIONS MODAL */}
-      {showDesktopInstructions && (
-        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowDesktopInstructions(false)}>
-          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl relative animate-fade-in" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setShowDesktopInstructions(false)} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 bg-gray-100 rounded-full">
-              <X size={20} />
-            </button>
-            
-            <div className="w-16 h-16 bg-brand/10 rounded-2xl flex items-center justify-center mb-6 mx-auto">
-              <Laptop size={32} className="text-brand" />
-            </div>
-            
-            <h3 className="text-center font-black text-lg text-gray-900 mb-2 uppercase tracking-wide">Instalar no Computador</h3>
-            <p className="text-center text-sm text-gray-500 font-medium mb-8">Para instalar nosso aplicativo no Chrome ou Edge:</p>
-            
-            <div className="space-y-4">
-              <div className="flex items-start gap-4">
-                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 font-black text-gray-600 text-sm">1</div>
-                <div>
-                  <p className="text-sm text-gray-800 font-bold">Barra de Endereços</p>
-                  <p className="text-xs text-gray-500 mt-1">Clique no ícone de tela/computador com seta no lado direito da barra de URLs.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-4">
-                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 font-black text-gray-600 text-sm">2</div>
-                <div>
-                  <p className="text-sm text-gray-800 font-bold">Ou via Menu do Navegador</p>
-                  <p className="text-xs text-gray-500 mt-1">Clique nos 3 pontinhos (⋮) {'>'} Salvar e Compartilhar {'>'} Instalar página como aplicativo.</p>
-                </div>
-              </div>
-            </div>
-            
-            <button 
-              onClick={() => setShowDesktopInstructions(false)}
-              className="w-full bg-brand text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs mt-8 hover:bg-brand-dark transition-colors"
-            >
-              Entendi
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ANDROID INSTRUCTIONS MODAL */}
-      {showAndroidInstructions && (
-        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowAndroidInstructions(false)}>
-          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl relative animate-fade-in" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setShowAndroidInstructions(false)} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 bg-gray-100 rounded-full">
-              <X size={20} />
-            </button>
-            
-            <div className="w-16 h-16 bg-brand/10 rounded-2xl flex items-center justify-center mb-6 mx-auto">
-              <Smartphone size={32} className="text-brand" />
-            </div>
-            
-            <h3 className="text-center font-black text-lg text-gray-900 mb-2 uppercase tracking-wide">Instalar no Android</h3>
-            <p className="text-center text-sm text-gray-500 font-medium mb-8">Para instalar nosso app, siga os passos no seu navegador Chrome:</p>
-            
-            <div className="space-y-4">
-              <div className="flex items-start gap-4">
-                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 font-black text-gray-600 text-sm">1</div>
-                <div>
-                  <p className="text-sm text-gray-800 font-bold">Abra o Menu</p>
-                  <p className="text-xs text-gray-500 mt-1">Toque nos três pontinhos (⋮) no canto superior direito do Chrome.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-4">
-                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 font-black text-gray-600 text-sm">2</div>
-                <div>
-                  <p className="text-sm text-gray-800 font-bold">Instalar Aplicativo</p>
-                  <p className="text-xs text-gray-500 mt-1">Selecione "Instalar aplicativo" ou "Adicionar à tela inicial" na lista.</p>
-                </div>
-              </div>
-            </div>
-            
-            <button 
-              onClick={() => setShowAndroidInstructions(false)}
-              className="w-full bg-brand text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs mt-8 hover:bg-brand-dark transition-colors"
-            >
-              Entendi
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* IOS INSTRUCTIONS MODAL */}
       {showIosInstructions && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowIosInstructions(false)}>
