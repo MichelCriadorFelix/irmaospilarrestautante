@@ -304,8 +304,8 @@ export default function AdminDashboard() {
     };
   }, []);
 
-  const handleSaveSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveSettings = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setSavingSettings(true);
     try {
       const dataToSave = sanitizeForFirestore(companyInfo);
@@ -1055,11 +1055,21 @@ export default function AdminDashboard() {
       {/* TAB 4: COMPANY DETAILS / CONFIGURATIONS */}
       {activeTab === 'settings' && (
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-          <div className="p-4 bg-gray-50/70 border-b border-gray-200">
-            <h3 className="font-black text-xs text-gray-900 uppercase tracking-widest flex items-center gap-2">
-              <Settings size={14} className="text-brand" /> Dados do Estabelecimento
-            </h3>
-            <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Gerencie os dados públicos exibidos aos clientes nas telas de pedido, chat e comprovantes</p>
+          <div className="p-4 bg-gray-50/70 border-b border-gray-200 flex justify-between items-center">
+            <div>
+              <h3 className="font-black text-xs text-gray-900 uppercase tracking-widest flex items-center gap-2">
+                <Settings size={14} className="text-brand" /> Dados do Estabelecimento
+              </h3>
+              <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Gerencie os dados públicos exibidos aos clientes nas telas de pedido, chat e comprovantes</p>
+            </div>
+            <button
+              onClick={() => handleSaveSettings()}
+              disabled={savingSettings}
+              className="bg-brand text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-lg hover:bg-brand-dark flex items-center gap-2 transition-colors disabled:opacity-50 shadow-sm"
+            >
+              {savingSettings ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />}
+              <span>Salvar Alterações</span>
+            </button>
           </div>
 
           <form onSubmit={handleSaveSettings} className="p-6 space-y-4">
@@ -1122,6 +1132,16 @@ export default function AdminDashboard() {
                         Remover Logo
                       </button>
                     )}
+
+                    <button
+                      type="button"
+                      disabled={savingSettings || uploadingLogo}
+                      onClick={() => handleSaveSettings()}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-[10px] font-bold uppercase tracking-wider rounded hover:bg-green-700 transition-all disabled:opacity-50 shadow-sm"
+                    >
+                      <Check size={12} />
+                      {savingSettings ? 'Salvando...' : 'Aplicar Alterações'}
+                    </button>
                   </div>
                 </div>
               </div>
