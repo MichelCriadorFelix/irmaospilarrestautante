@@ -9,3 +9,14 @@
   --color-canvas: #fdfaf5;
   --color-text-main: #2d2d2d;
 }
+
+/* Hide Vercel Toolbar if it bypasses script flags */
+vercel-live-feedback, 
+.vercel-toolbar,
+#vercel-live-feedback,
+[data-vercel-toolbar] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
