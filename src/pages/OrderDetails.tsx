@@ -215,7 +215,7 @@ export default function OrderDetails() {
     }
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
+  const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() && !selectedImage) return;
     if (!user || !id) return;
@@ -230,66 +230,68 @@ export default function OrderDetails() {
       setSelectedImage(null);
     }
     
-    setUploading(true);
-    try {
-      let imageUrl = '';
-      
-      if (imageToUpload) {
-        try {
-          const compressedBase64 = await compressImage(imageToUpload.file);
-          
+    const uploadAndSend = async () => {
+      setUploading(true);
+      try {
+        let imageUrl = '';
+        
+        if (imageToUpload) {
           try {
-            // Tentativa de upload para o Storage usando o blob convertido localmente
-            const fileRef = ref(storage, `orders/${id}/receipts/${Date.now()}_${imageToUpload.file.name}`);
-            const blob = base64ToBlob(compressedBase64);
-            const uploadResult = await uploadBytes(fileRef, blob);
-            imageUrl = await getDownloadURL(uploadResult.ref);
-          } catch (storageErr) {
-            console.warn('Error uploading to Firebase Storage, fallback to compressed Base64:', storageErr);
-            imageUrl = compressedBase64;
+            const compressedBase64 = await compressImage(imageToUpload.file);
+            
+            try {
+              const fileRef = ref(storage, `orders/${id}/receipts/${Date.now()}_${imageToUpload.file.name}`);
+              const blob = base64ToBlob(compressedBase64);
+              const uploadResult = await uploadBytes(fileRef, blob);
+              imageUrl = await getDownloadURL(uploadResult.ref);
+            } catch (storageErr) {
+              console.warn('Error uploading to Firebase Storage, fallback to compressed Base64:', storageErr);
+              imageUrl = compressedBase64;
+            }
+          } catch (compErr) {
+            console.error('Error compressing image:', compErr);
+            setAlert({
+              type: 'error',
+              message: 'Erro ao processar imagem',
+              submessage: 'Não foi possível otimizar o arquivo.'
+            });
+            setUploading(false);
+            return;
           }
-        } catch (compErr) {
-          console.error('Error compressing image:', compErr);
-          setAlert({
-            type: 'error',
-            message: 'Erro ao processar imagem',
-            submessage: 'Não foi possível otimizar o arquivo.'
-          });
-          setUploading(false);
-          return;
         }
-      }
 
-      setUploading(false);
+        setUploading(false);
 
-      // Salva no banco de forma assíncrona (Firestore gerencia fila offline se houver queda)
-      addDoc(collection(db, 'orders', id, 'messages'), {
-        senderId: user.uid,
-        senderName: user.name,
-        text: textToSend || 'Envio de comprovante/imagem',
-        ...(imageUrl ? { imageUrl } : {}),
-        createdAt: Date.now()
-      }).catch(err => {
-        console.error('Erro assíncrono ao salvar mensagem:', err);
-      });
-
-      if (imageUrl && order?.status === 'pending_payment') {
-        updateDoc(doc(db, 'orders', id), {
-          receiptUrl: imageUrl
+        // Salva no banco de forma assíncrona
+        addDoc(collection(db, 'orders', id, 'messages'), {
+          senderId: user.uid,
+          senderName: user.name,
+          text: textToSend || 'Envio de comprovante/imagem',
+          ...(imageUrl ? { imageUrl } : {}),
+          createdAt: Date.now()
         }).catch(err => {
-          console.error('Erro assíncrono ao vincular comprovante:', err);
+          console.error('Erro assíncrono ao salvar mensagem:', err);
         });
-      }
 
-    } catch (err) {
-      console.error('Error sending message:', err);
-      setAlert({
-        type: 'error',
-        message: 'Erro ao enviar',
-        submessage: 'Houve uma falha ao enviar sua mensagem.'
-      });
-      setUploading(false);
-    }
+        if (imageUrl && order?.status === 'pending_payment') {
+          updateDoc(doc(db, 'orders', id), {
+            receiptUrl: imageUrl
+          }).catch(err => {
+            console.error('Erro assíncrono ao vincular comprovante:', err);
+          });
+        }
+      } catch (err) {
+        console.error('Error sending message:', err);
+        setAlert({
+          type: 'error',
+          message: 'Erro ao enviar',
+          submessage: 'Houve uma falha ao enviar sua mensagem.'
+        });
+        setUploading(false);
+      }
+    };
+    
+    uploadAndSend();
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -885,9 +887,8 @@ export default function OrderDetails() {
             />
             <button 
               type="button" 
-              disabled={uploading}
               onClick={() => fileInputRef.current?.click()}
-              className="p-2 text-brand hover:text-brand-dark disabled:opacity-50 transition-colors shrink-0"
+              className="p-2 text-brand hover:text-brand-dark transition-colors shrink-0"
               title="Anexar comprovante ou foto"
             >
               <Upload size={20} />
@@ -901,7 +902,7 @@ export default function OrderDetails() {
             />
             <button 
               type="submit" 
-              disabled={(!newMessage.trim() && !selectedImage) || uploading} 
+              disabled={!newMessage.trim() && !selectedImage} 
               className="p-2 bg-brand text-white rounded-lg hover:bg-brand-dark disabled:opacity-50 transition-colors shadow-sm shrink-0 flex items-center justify-center"
             >
               {uploading ? (

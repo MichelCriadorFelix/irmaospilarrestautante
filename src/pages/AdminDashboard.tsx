@@ -89,6 +89,7 @@ export default function AdminDashboard() {
   
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoError, setLogoError] = useState(false);
 
   // Helper to compress logo to max 400x400
   const compressLogo = (file: File, maxWidth = 400, maxHeight = 400, quality = 0.85): Promise<string> => {
@@ -133,6 +134,23 @@ export default function AdminDashboard() {
     });
   };
 
+  const base64ToBlob = (base64: string): Blob => {
+    try {
+      const parts = base64.split(';base64,');
+      const contentType = parts[0].split(':')[1];
+      const raw = window.atob(parts[1]);
+      const rawLength = raw.length;
+      const uInt8Array = new Uint8Array(rawLength);
+      for (let i = 0; i < rawLength; ++i) {
+        uInt8Array[i] = raw.charCodeAt(i);
+      }
+      return new Blob([uInt8Array], { type: contentType });
+    } catch (e) {
+      console.error('Error converting base64 to blob:', e);
+      return new Blob([], { type: 'image/jpeg' });
+    }
+  };
+
   const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -145,8 +163,7 @@ export default function AdminDashboard() {
       try {
         // Try Firebase Storage first
         const logoRef = ref(storage, `settings/logo_${Date.now()}_${file.name}`);
-        const res = await fetch(compressedBase64);
-        const blob = await res.blob();
+        const blob = base64ToBlob(compressedBase64);
         const uploadResult = await uploadBytes(logoRef, blob);
         logoUrl = await getDownloadURL(uploadResult.ref);
       } catch (storageErr) {
@@ -1072,8 +1089,8 @@ export default function AdminDashboard() {
               
               <div className="flex flex-col sm:flex-row items-center gap-4">
                 <div className="w-20 h-20 rounded-full border border-gray-200 bg-white overflow-hidden flex items-center justify-center relative shadow-inner shrink-0">
-                  {companyInfo.logoUrl ? (
-                    <img src={companyInfo.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                  {companyInfo.logoUrl && !logoError ? (
+                    <img src={companyInfo.logoUrl} onError={() => setLogoError(true)} alt="Logo" className="w-full h-full object-cover" />
                   ) : (
                     <div className="text-gray-300 flex flex-col items-center">
                       <ImageIcon size={32} />

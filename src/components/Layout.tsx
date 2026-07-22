@@ -30,6 +30,7 @@ export default function Layout() {
   const { items } = useCart();
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isStandalone, setIsStandalone] = useState(false);
+  const [logoError, setLogoError] = useState(false);
   const [companyInfo, setCompanyInfo] = useState<{ name: string; logoUrl?: string }>({
     name: "Irmãos Pilar"
   });
@@ -104,8 +105,8 @@ export default function Layout() {
       <header className="bg-dark text-white h-14 px-4 flex items-center justify-between border-b border-gray-800 md:hidden sticky top-0 z-40">
         <div className="flex items-center space-x-2.5">
           <div className="w-8 h-8 bg-brand rounded-lg flex items-center justify-center font-bold text-white overflow-hidden shrink-0">
-            {companyInfo.logoUrl ? (
-              <img src={companyInfo.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+            {companyInfo.logoUrl && !logoError ? (
+              <img src={companyInfo.logoUrl} onError={() => setLogoError(true)} alt="Logo" className="w-full h-full object-cover" />
             ) : (
               <UtensilsCrossed size={16} />
             )}
@@ -135,8 +136,8 @@ export default function Layout() {
         <div className="p-6 flex flex-col items-start border-b border-gray-800 relative w-full">
           <div className="flex items-center space-x-3 font-bold text-xl">
             <div className="w-10 h-10 bg-brand rounded-lg flex items-center justify-center font-bold text-xl text-white overflow-hidden shrink-0">
-              {companyInfo.logoUrl ? (
-                <img src={companyInfo.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+              {companyInfo.logoUrl && !logoError ? (
+                <img src={companyInfo.logoUrl} onError={() => setLogoError(true)} alt="Logo" className="w-full h-full object-cover" />
               ) : (
                 <UtensilsCrossed size={20} />
               )}

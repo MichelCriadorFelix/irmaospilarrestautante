@@ -12,6 +12,7 @@ export default function Login() {
   const [isForgot, setIsForgot] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -169,8 +170,8 @@ export default function Login() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-brand rounded-3xl rotate-12 flex items-center justify-center mx-auto mb-6 shadow-xl shadow-brand/20">
-            {companyInfo.logoUrl ? (
-              <img src={companyInfo.logoUrl} alt="Logo" className="w-12 h-12 -rotate-12 object-contain" />
+            {companyInfo.logoUrl && !logoError ? (
+              <img src={companyInfo.logoUrl} onError={() => setLogoError(true)} alt="Logo" className="w-12 h-12 -rotate-12 object-contain" />
             ) : (
               <UtensilsCrossed size={40} className="text-white -rotate-12" />
             )}
