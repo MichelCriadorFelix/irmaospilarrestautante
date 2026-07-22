@@ -516,10 +516,10 @@ export default function OrderDetails() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-4 md:py-6 grid grid-cols-1 lg:grid-cols-3 gap-6 lg:h-full lg:overflow-hidden">
+    <div className="max-w-6xl mx-auto px-4 py-4 md:py-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
       
       {/* Left: Order Info */}
-      <div className="lg:col-span-2 overflow-y-auto pr-2 pb-20 lg:pb-0">
+      <div className="lg:col-span-2">
         <div className="bg-white shadow rounded-lg p-6 mb-6">
           <div className="flex justify-between items-start mb-6 border-b border-gray-100 pb-4">
             <div>
@@ -823,7 +823,7 @@ export default function OrderDetails() {
       </div>
 
       {/* Right: Chat */}
-      <div className="bg-white shadow rounded-lg flex flex-col h-[500px] lg:h-full border border-gray-200">
+      <div className="bg-white shadow rounded-lg flex flex-col h-[500px] lg:h-[calc(100vh-120px)] lg:sticky lg:top-24 border border-gray-200">
         <div className="p-4 border-b bg-gray-50 rounded-t-lg">
           <h3 className="font-bold text-gray-900">Chat & Comprovantes</h3>
         </div>

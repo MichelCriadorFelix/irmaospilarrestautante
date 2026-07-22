@@ -102,7 +102,7 @@ export default function Layout() {
   const isAdmin = user?.role === 'admin';
 
   return (
-    <div className="h-[100dvh] bg-canvas text-text-main flex flex-col md:flex-row font-sans overflow-hidden">
+    <div className="min-h-[100dvh] bg-canvas text-text-main flex flex-col md:flex-row font-sans">
       {/* HEADER FOR MOBILE (md:hidden) */}
       <header className="bg-dark text-white h-14 px-4 flex items-center justify-between border-b border-gray-800 md:hidden sticky top-0 z-40">
         <div className="flex items-center space-x-2.5">
@@ -233,7 +233,7 @@ export default function Layout() {
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
+      <main className="flex-1 w-full relative pb-20 md:pb-0">
         <Outlet />
       </main>
 

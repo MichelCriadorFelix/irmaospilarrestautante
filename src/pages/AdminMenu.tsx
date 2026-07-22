@@ -3,12 +3,13 @@ import { collection, query, onSnapshot, doc, updateDoc, deleteDoc, setDoc, addDo
 import { db, sanitizeForFirestore, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Product } from '../types';
 import { formatCurrency } from '../lib/utils';
-import { Edit, Trash2, Plus, X, Check, AlertTriangle, AlertCircle } from 'lucide-react';
+import { Edit, Trash2, Plus, X, Check, AlertTriangle, AlertCircle, Search } from 'lucide-react';
 import { initialMenu } from '../lib/seedData';
 import { AnimatePresence, motion } from 'framer-motion';
 
 export default function AdminMenu() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<Product>>({
@@ -136,6 +137,12 @@ export default function AdminMenu() {
     }
   };
 
+  const filteredProducts = products.filter(product => 
+    product.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    product.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    product.category.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
@@ -201,6 +208,24 @@ export default function AdminMenu() {
       )}
 
       <div className="bg-white shadow-sm rounded-xl overflow-hidden border border-gray-100">
+        <div className="p-4 border-b border-gray-100 bg-gray-50 flex flex-col sm:flex-row gap-4 justify-between items-center">
+          <div className="relative w-full sm:w-96">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search size={16} className="text-gray-400" />
+            </div>
+            <input
+              type="text"
+              placeholder="Buscar por nome, descrição ou categoria..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand"
+            />
+          </div>
+          <div className="text-xs font-bold text-gray-500 uppercase tracking-widest">
+            {filteredProducts.length} {filteredProducts.length === 1 ? 'item' : 'itens'}
+          </div>
+        </div>
+
         <table className="min-w-full divide-y divide-gray-100">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
@@ -212,39 +237,47 @@ export default function AdminMenu() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-50">
-            {products.map(product => (
-              <tr key={product.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-3">
-                  <div className="text-xs font-bold text-gray-900 leading-tight">{product.name}</div>
-                  <div className="text-[10px] text-gray-500 truncate max-w-[200px] mt-0.5">{product.description}</div>
-                </td>
-                <td className="px-4 py-3 whitespace-nowrap text-[10px] font-bold uppercase tracking-widest text-gray-500">
-                  {product.category === 'refeicao' ? 'Refeição' : 'Bebida'}
-                </td>
-                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900 font-black">
-                  {formatCurrency(product.price)}
-                  {product.priceOption2 && <span className="text-[9px] text-brand font-bold uppercase tracking-widest block mt-0.5">2 pedaços: {formatCurrency(product.priceOption2)}</span>}
-                </td>
-                <td className="px-4 py-3 whitespace-nowrap">
-                  <button 
-                    onClick={() => handleToggleAvailable(product)}
-                    className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest transition-colors ${
-                      product.available ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'
-                    }`}
-                  >
-                    {product.available ? 'Disponível' : 'Indisponível'}
-                  </button>
-                </td>
-                <td className="px-4 py-3 whitespace-nowrap text-right space-x-2">
-                  <button onClick={() => handleEdit(product)} className="text-gray-400 hover:text-brand inline-flex p-1.5 rounded-md hover:bg-brand/10 transition-colors">
-                    <Edit size={16} />
-                  </button>
-                  <button onClick={() => handleDeleteAttempt(product)} className="text-gray-400 hover:text-red-600 inline-flex p-1.5 rounded-md hover:bg-red-50 transition-colors">
-                    <Trash2 size={16} />
-                  </button>
+            {filteredProducts.length > 0 ? (
+              filteredProducts.map(product => (
+                <tr key={product.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-4 py-3">
+                    <div className="text-xs font-bold text-gray-900 leading-tight">{product.name}</div>
+                    <div className="text-[10px] text-gray-500 truncate max-w-[200px] mt-0.5">{product.description}</div>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                    {product.category === 'refeicao' ? 'Refeição' : 'Bebida'}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900 font-black">
+                    {formatCurrency(product.price)}
+                    {product.priceOption2 && <span className="text-[9px] text-brand font-bold uppercase tracking-widest block mt-0.5">2 pedaços: {formatCurrency(product.priceOption2)}</span>}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <button 
+                      onClick={() => handleToggleAvailable(product)}
+                      className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest transition-colors ${
+                        product.available ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'
+                      }`}
+                    >
+                      {product.available ? 'Disponível' : 'Indisponível'}
+                    </button>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-right space-x-2">
+                    <button onClick={() => handleEdit(product)} className="text-gray-400 hover:text-brand inline-flex p-1.5 rounded-md hover:bg-brand/10 transition-colors">
+                      <Edit size={16} />
+                    </button>
+                    <button onClick={() => handleDeleteAttempt(product)} className="text-gray-400 hover:text-red-600 inline-flex p-1.5 rounded-md hover:bg-red-50 transition-colors">
+                      <Trash2 size={16} />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">
+                  Nenhum item encontrado.
                 </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
