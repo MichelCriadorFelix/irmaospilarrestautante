@@ -75,6 +75,16 @@ export default function OrderDetails() {
   } | null>(null);
 
   useEffect(() => {
+    // Se o usuário acessar o link direto (ex: via notificação) e não tiver histórico,
+    // injetamos a página pai no histórico para que o botão de voltar nativo funcione
+    if (window.history.length <= 2) {
+      const parentUrl = user?.role === 'admin' ? '/admin' : '/orders';
+      window.history.replaceState(null, '', parentUrl);
+      window.history.pushState(null, '', window.location.href);
+    }
+  }, [user]);
+
+  useEffect(() => {
     if (alert) {
       const timer = setTimeout(() => {
         setAlert(null);
@@ -506,16 +516,22 @@ export default function OrderDetails() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-4 md:py-8 grid grid-cols-1 lg:grid-cols-3 gap-8 lg:h-[calc(100vh-64px)] lg:overflow-hidden">
+    <div className="max-w-6xl mx-auto px-4 py-4 md:py-6 grid grid-cols-1 lg:grid-cols-3 gap-6 lg:h-full lg:overflow-hidden">
       
       {/* Left: Order Info */}
-      <div className="lg:col-span-2 overflow-y-auto pr-4">
+      <div className="lg:col-span-2 overflow-y-auto pr-2 pb-20 lg:pb-0">
         <div className="bg-white shadow rounded-lg p-6 mb-6">
           <div className="flex justify-between items-start mb-6 border-b border-gray-100 pb-4">
             <div>
               <div className="flex items-center gap-3">
                 <button 
-                  onClick={() => navigate(-1)} 
+                  onClick={() => {
+                    if (window.history.length > 2) {
+                      navigate(-1);
+                    } else {
+                      navigate(user?.role === 'admin' ? '/admin' : '/orders');
+                    }
+                  }} 
                   className="p-1.5 mr-1 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
                   title="Voltar"
                 >

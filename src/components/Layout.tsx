@@ -86,12 +86,7 @@ export default function Layout() {
       (window as any).deferredPrompt = null;
       setDeferredPrompt(null);
     } else {
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-      if (isIOS) {
-        setShowInstallModal(true);
-      } else {
-        alert('A instalação automática ainda está sendo preparada pelo seu navegador. Tente novamente em alguns segundos ou use o menu do navegador ("Adicionar à tela inicial").');
-      }
+      setShowInstallModal(true);
     }
   };
 
@@ -107,7 +102,7 @@ export default function Layout() {
   const isAdmin = user?.role === 'admin';
 
   return (
-    <div className="min-h-screen bg-canvas text-text-main flex flex-col md:flex-row font-sans">
+    <div className="h-[100dvh] bg-canvas text-text-main flex flex-col md:flex-row font-sans overflow-hidden">
       {/* HEADER FOR MOBILE (md:hidden) */}
       <header className="bg-dark text-white h-14 px-4 flex items-center justify-between border-b border-gray-800 md:hidden sticky top-0 z-40">
         <div className="flex items-center space-x-2.5">
@@ -267,11 +262,24 @@ export default function Layout() {
               </p>
 
               <div className="space-y-4">
+                {/* General/Android Instructions */}
+                <div className="border border-blue-100 bg-blue-50/50 rounded-xl p-3.5 space-y-2.5">
+                  <div className="flex items-center gap-2 text-blue-900 font-bold">
+                    <Download size={16} className="text-blue-600" />
+                    <span>Android / Chrome / Edge</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1.5 text-blue-800 font-medium">
+                    <li>Abra o menu do navegador (ícone de 3 pontos no canto superior direito).</li>
+                    <li>Toque em <strong className="font-bold">"Instalar aplicativo"</strong> ou <strong className="font-bold">"Adicionar à Tela inicial"</strong>.</li>
+                    <li>Confirme a instalação no botão Instalar.</li>
+                  </ol>
+                </div>
+
                 {/* iOS Instructions */}
                 <div className="border border-amber-100 bg-amber-50/50 rounded-xl p-3.5 space-y-2.5">
                   <div className="flex items-center gap-2 text-amber-900 font-bold">
                     <Smartphone size={16} className="text-amber-600" />
-                    <span>No iPhone / iPad (Safari)</span>
+                    <span>iPhone / iPad (Safari)</span>
                   </div>
                   <ol className="list-decimal list-inside space-y-1.5 text-amber-800 font-medium">
                     <li>Abra o link do aplicativo no navegador <strong className="font-bold">Safari</strong>.</li>
