@@ -239,6 +239,15 @@ export default function Home() {
                   Deseja adicionar este item ao seu carrinho de compras?
                 </p>
 
+                {pendingAdd.selectedOption === 'Nenhum' && (
+                  <div className="w-full bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 flex items-start gap-2 text-left">
+                    <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                    <p className="text-[10px] text-amber-800 font-bold leading-relaxed">
+                      Você não escolheu nenhum acompanhamento. Batata frita, legumes ou verduras estão inclusos sem custo extra — tem certeza que não quer nenhum?
+                    </p>
+                  </div>
+                )}
+
                 <div className="w-full bg-gray-50 rounded-xl border border-gray-100 p-4 mb-6 text-left">
                   <h4 className="text-xs font-black text-gray-900 mb-1">
                     {pendingAdd.product.name}
@@ -248,7 +257,7 @@ export default function Home() {
                       {pendingAdd.product.description}
                     </p>
                   )}
-                  
+
                   <div className="space-y-1.5 border-t border-gray-100 pt-3 text-[10px] uppercase tracking-wider font-bold text-gray-600">
                     {pendingAdd.selectedOption && (
                       <div className="flex justify-between">

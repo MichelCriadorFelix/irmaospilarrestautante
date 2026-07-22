@@ -1,8 +1,85 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // The two hardcoded restaurant-owner accounts are allowed to bootstrap
+    // themselves as admin on first sign-in; nobody else can self-assign the
+    // admin role — every other admin promotion has to go through an
+    // existing admin via the `update` rule below.
+    function isBootstrapOwnerEmail(email) {
+      return email == 'michelgeminicriador@gmail.com' || email == 'felixcastroadv@gmail.com';
+    }
+
+    // Company-wide settings (name, hours, logo). Everyone signed in can read;
+    // only admins can change it.
+    match /settings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Menu items. Prices/availability must never be writable by customers.
+    match /products/{productId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // User profiles. Anyone can read/update their own profile, but the
+    // `role` field can only ever be changed by an existing admin — this is
+    // what stops a customer from self-promoting to admin.
+    match /users/{userId} {
+      allow read: if isAdmin() || isOwner(userId);
+      allow create: if isOwner(userId) &&
+        (request.resource.data.role == 'user' ||
+         (request.resource.data.role == 'admin' && isBootstrapOwnerEmail(request.resource.data.email)));
+      allow update: if isAdmin() ||
+        (isOwner(userId) &&
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']));
+      allow delete: if isAdmin();
+    }
+
+    // Orders. Customers can only create orders for themselves and can only
+    // touch the receipt field on their own still-pending order afterwards
+    // (e.g. attaching a payment proof) — every other change, including
+    // status and total, is admin-only.
+    match /orders/{orderId} {
+      allow read: if isAdmin() || isOwner(resource.data.userId);
+      allow create: if isSignedIn() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.status == 'pending_payment' &&
+        request.resource.data.total is number &&
+        request.resource.data.total > 0;
+      allow update: if isAdmin() ||
+        (isOwner(resource.data.userId) &&
+         resource.data.status == 'pending_payment' &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['receiptUrl', 'updatedAt']));
+      allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        allow read: if isAdmin() ||
+          isOwner(get(/databases/$(database)/documents/orders/$(orderId)).data.userId);
+        allow create: if isAdmin() ||
+          (isOwner(get(/databases/$(database)/documents/orders/$(orderId)).data.userId) &&
+           request.resource.data.senderId == request.auth.uid);
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // Financial records — never exposed to customers.
+    match /finances/{financeId} {
+      allow read, write: if isAdmin();
     }
   }
 }

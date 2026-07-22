@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useExitGuard } from '../hooks/useExitGuard';
+import CookieConsentBanner from './CookieConsentBanner';
 
 export default function Layout() {
   const { user, loading, logout } = useAuth();
@@ -332,6 +333,7 @@ export default function Layout() {
         <Outlet />
       </main>
         </div>
+  <CookieConsentBanner />
   </div>
   );
 }

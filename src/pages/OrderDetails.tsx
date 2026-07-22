@@ -724,6 +724,16 @@ export default function OrderDetails() {
             </div>
           )}
 
+          {/* Admin change-due reminder */}
+          {isAdmin && order.paymentMethod === 'cash' && order.changeRequested && (
+            <div className="mb-6 bg-green-50 border border-green-200 rounded-xl p-4 text-center shadow-sm">
+              <h3 className="font-black text-green-900 text-xs uppercase tracking-widest mb-1">Pagamento em Dinheiro — Precisa de Troco</h3>
+              <p className="text-green-800 text-sm font-bold">
+                Troco para: {formatCurrency(order.changeFor || 0)} (Levar {formatCurrency((order.changeFor || 0) - order.total)} de troco)
+              </p>
+            </div>
+          )}
+
           {/* Admin Controls */}
           {isAdmin && (
             <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mt-6">

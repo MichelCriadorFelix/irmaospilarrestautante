@@ -17,6 +17,7 @@ export interface User {
   role: Role;
   createdAt: number;
   emailVerified?: boolean;
+  cookieConsentAt?: number;
 }
 
 export interface Product {

@@ -62,8 +62,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         role: isOwner ? 'admin' : (userSnap.data().role || 'user')
       } as User;
     } else {
-      // Default to 'user' role unless email contains 'admin' or is a known owner
-      const role = (email.includes('admin') || isOwner) ? 'admin' : 'user';
+      // Default to 'user' role unless this is one of the two hardcoded
+      // restaurant-owner accounts (also enforced server-side in
+      // firestore.rules — this check alone is not a security boundary).
+      const role = isOwner ? 'admin' : 'user';
       userData = {
         uid: firebaseUser.uid,
         email: email,
@@ -110,8 +112,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const result = await createUserWithEmailAndPassword(auth, email, pass);
       const firebaseUser = result.user;
       
-      // Save initial profile to Firestore
-      const role = (email.includes('admin') || email === 'michelgeminicriador@gmail.com' || email === 'felixcastroadv@gmail.com') ? 'admin' : 'user';
+      // Save initial profile to Firestore. Only the two hardcoded owner
+      // emails may register as admin (also enforced in firestore.rules).
+      const role = (email === 'michelgeminicriador@gmail.com' || email === 'felixcastroadv@gmail.com') ? 'admin' : 'user';
       const userData: User = {
         uid: firebaseUser.uid,
         email: firebaseUser.email || email,
