@@ -32,6 +32,7 @@ export default function Layout() {
   const [isStandalone, setIsStandalone] = useState(false);
   const [showInstallBanner, setShowInstallBanner] = useState(true);
   const [showIosInstructions, setShowIosInstructions] = useState(false);
+  const [showDesktopInstructions, setShowDesktopInstructions] = useState(false);
   const [logoError, setLogoError] = useState(false);
   const [companyInfo, setCompanyInfo] = useState<{ name: string; logoUrl?: string }>({
     name: "Irmãos Pilar"
@@ -49,23 +50,32 @@ export default function Layout() {
       }
     });
 
-    // Inicializa o deferredPrompt se ele já foi capturado no main.tsx
+    // Capture initial prompt if already available on window
     if ((window as any).deferredPrompt) {
+      console.log('Found initial deferredPrompt on window');
       setDeferredPrompt((window as any).deferredPrompt);
     }
 
     const handlePromptAvailable = (e: any) => {
-      console.log('PWA prompt available event received');
-      setDeferredPrompt(e.detail);
+      console.log('PWA prompt available event received in Layout');
+      const event = e.detail || e;
+      setDeferredPrompt(event);
+      (window as any).deferredPrompt = event;
     };
 
     const handleAppInstalled = () => {
+      console.log('App was installed, hiding banner');
       setIsStandalone(true);
       setShowInstallBanner(false);
       setDeferredPrompt(null);
+      (window as any).deferredPrompt = null;
     };
 
     window.addEventListener('pwa-prompt-available', handlePromptAvailable);
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      handlePromptAvailable(e);
+    });
     window.addEventListener('appinstalled', handleAppInstalled);
 
     const checkStandalone = () => {
@@ -77,7 +87,10 @@ export default function Layout() {
     checkStandalone();
 
     const media = window.matchMedia('(display-mode: standalone)');
-    const listener = (e: any) => setIsStandalone(e.matches);
+    const listener = (e: any) => {
+      setIsStandalone(e.matches);
+      if (e.matches) setShowInstallBanner(false);
+    };
     media.addEventListener('change', listener);
 
     return () => {
@@ -95,29 +108,27 @@ export default function Layout() {
   };
   
   const handleInstallClick = async () => {
-    if (deferredPrompt) {
-      console.log('Triggering native install prompt from deferredPrompt...');
-      deferredPrompt.prompt();
+    const promptToUse = deferredPrompt || (window as any).deferredPrompt;
+
+    if (promptToUse) {
+      console.log('Triggering native install prompt...');
       try {
-        const choiceResult = await deferredPrompt.userChoice;
-        console.log(`User response to install prompt: ${choiceResult.outcome}`);
+        await promptToUse.prompt();
+        const choiceResult = await promptToUse.userChoice;
+        console.log(`User response: ${choiceResult.outcome}`);
         if (choiceResult.outcome === 'accepted') {
           setShowInstallBanner(false);
+          setDeferredPrompt(null);
+          (window as any).deferredPrompt = null;
         }
       } catch (e) {
-        console.error('Error during installation choice:', e);
+        console.error('Error triggering prompt:', e);
+        setShowDesktopInstructions(true);
       }
-      setDeferredPrompt(null);
-      (window as any).deferredPrompt = null;
     } else if (isIos()) {
       setShowIosInstructions(true);
     } else {
-      // Se não houver evento, tentamos avisar de forma mais discreta ou verificar se já está instalado
-      if (isStandalone) {
-        alert('O aplicativo já está instalado e em execução.');
-      } else {
-        alert('O navegador ainda não liberou a instalação. Tente novamente em alguns segundos ou use o menu do navegador (Instalar).');
-      }
+      setShowDesktopInstructions(true);
     }
   };
 
@@ -177,27 +188,69 @@ export default function Layout() {
             </div>
             
             <h3 className="text-center font-black text-lg text-gray-900 mb-2 uppercase tracking-wide">Instalar no iPhone</h3>
-            <p className="text-center text-sm text-gray-500 font-medium mb-8">Para instalar nosso app no seu iPhone ou iPad, siga os passos abaixo:</p>
+            <p className="text-center text-sm text-gray-500 font-medium mb-8">Para instalar nosso app no seu iPhone ou iPad:</p>
             
             <div className="space-y-4">
               <div className="flex items-start gap-4">
                 <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 font-black text-gray-600 text-sm">1</div>
                 <div>
-                  <p className="text-sm text-gray-800 font-bold">Toque em Compartilhar</p>
-                  <p className="text-xs text-gray-500 mt-1">Na barra inferior do Safari, toque no ícone com uma seta para cima.</p>
+                  <p className="text-sm text-gray-800 font-bold">Botão Compartilhar</p>
+                  <p className="text-xs text-gray-500 mt-1">Toque no ícone de compartilhar (quadrado com seta para cima) na barra inferior do Safari.</p>
                 </div>
               </div>
               <div className="flex items-start gap-4">
                 <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 font-black text-gray-600 text-sm">2</div>
                 <div>
                   <p className="text-sm text-gray-800 font-bold">Adicionar à Tela de Início</p>
-                  <p className="text-xs text-gray-500 mt-1">Role a lista para baixo e toque nesta opção (ícone de [ + ]).</p>
+                  <p className="text-xs text-gray-500 mt-1">Role a lista para baixo e toque em "Adicionar à Tela de Início".</p>
                 </div>
               </div>
             </div>
             
             <button 
               onClick={() => setShowIosInstructions(false)}
+              className="w-full bg-brand text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs mt-8 hover:bg-brand-dark transition-colors"
+            >
+              Entendi
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* DESKTOP/ANDROID FALLBACK INSTRUCTIONS MODAL */}
+      {showDesktopInstructions && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowDesktopInstructions(false)}>
+          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl relative animate-fade-in" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setShowDesktopInstructions(false)} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 bg-gray-100 rounded-full">
+              <X size={20} />
+            </button>
+            
+            <div className="w-16 h-16 bg-brand/10 rounded-2xl flex items-center justify-center mb-6 mx-auto">
+              <Laptop size={32} className="text-brand" />
+            </div>
+            
+            <h3 className="text-center font-black text-lg text-gray-900 mb-2 uppercase tracking-wide">Instalar Aplicativo</h3>
+            <p className="text-center text-sm text-gray-500 font-medium mb-8">O navegador ainda não ativou a instalação automática. Você pode instalar manualmente:</p>
+            
+            <div className="space-y-4">
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 font-black text-gray-600 text-sm">1</div>
+                <div>
+                  <p className="text-sm text-gray-800 font-bold">Barra de Endereços</p>
+                  <p className="text-xs text-gray-500 mt-1">Procure pelo ícone de tela com seta no lado direito da barra de URLs (Chrome/Edge).</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 font-black text-gray-600 text-sm">2</div>
+                <div>
+                  <p className="text-sm text-gray-800 font-bold">Menu do Navegador</p>
+                  <p className="text-xs text-gray-500 mt-1">Clique nos 3 pontinhos (⋮) {'>'} Salvar e Compartilhar {'>'} Instalar página como aplicativo.</p>
+                </div>
+              </div>
+            </div>
+            
+            <button 
+              onClick={() => setShowDesktopInstructions(false)}
               className="w-full bg-brand text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs mt-8 hover:bg-brand-dark transition-colors"
             >
               Entendi
