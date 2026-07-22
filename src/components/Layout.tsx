@@ -49,20 +49,23 @@ export default function Layout() {
       }
     });
 
-    const handleBeforeInstallPrompt = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      (window as any).deferredPrompt = e;
+    // Inicializa o deferredPrompt se ele já foi capturado no main.tsx
+    if ((window as any).deferredPrompt) {
+      setDeferredPrompt((window as any).deferredPrompt);
+    }
+
+    const handlePromptAvailable = (e: any) => {
+      console.log('PWA prompt available event received');
+      setDeferredPrompt(e.detail);
     };
 
     const handleAppInstalled = () => {
       setIsStandalone(true);
       setShowInstallBanner(false);
-      (window as any).deferredPrompt = null;
       setDeferredPrompt(null);
     };
 
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('pwa-prompt-available', handlePromptAvailable);
     window.addEventListener('appinstalled', handleAppInstalled);
 
     const checkStandalone = () => {
@@ -79,7 +82,7 @@ export default function Layout() {
 
     return () => {
       unsub();
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('pwa-prompt-available', handlePromptAvailable);
       window.removeEventListener('appinstalled', handleAppInstalled);
       media.removeEventListener('change', listener);
     };
@@ -90,37 +93,31 @@ export default function Layout() {
     const userAgent = window.navigator.userAgent.toLowerCase();
     return /iphone|ipad|ipod/.test(userAgent);
   };
-  const isAndroid = () => {
-    const userAgent = window.navigator.userAgent.toLowerCase();
-    return /android/.test(userAgent);
-  };
   
   const handleInstallClick = async () => {
-    // Tenta pegar o evento do window (capturado no main.tsx) ou do estado local
-    const promptEvent = (window as any).deferredPrompt || deferredPrompt;
-    
-    if (promptEvent) {
-      console.log('Triggering native install prompt...');
-      promptEvent.prompt();
+    if (deferredPrompt) {
+      console.log('Triggering native install prompt from deferredPrompt...');
+      deferredPrompt.prompt();
       try {
-        const choiceResult = await promptEvent.userChoice;
+        const choiceResult = await deferredPrompt.userChoice;
+        console.log(`User response to install prompt: ${choiceResult.outcome}`);
         if (choiceResult.outcome === 'accepted') {
-          console.log('User accepted the install prompt');
           setShowInstallBanner(false);
         }
       } catch (e) {
         console.error('Error during installation choice:', e);
       }
-      // Limpa após o uso
-      (window as any).deferredPrompt = null;
       setDeferredPrompt(null);
+      (window as any).deferredPrompt = null;
     } else if (isIos()) {
-      // iOS ainda precisa de tutorial pois não suporta o evento beforeinstallprompt
       setShowIosInstructions(true);
     } else {
-      // Se não houver evento e não for iOS, o navegador provavelmente 
-      // já mostrou o ícone na barra de endereços ou o app já está instalado.
-      alert('Use o ícone de instalação na barra de endereços do seu navegador ou o menu (Instalar Aplicativo).');
+      // Se não houver evento, tentamos avisar de forma mais discreta ou verificar se já está instalado
+      if (isStandalone) {
+        alert('O aplicativo já está instalado e em execução.');
+      } else {
+        alert('O navegador ainda não liberou a instalação. Tente novamente em alguns segundos ou use o menu do navegador (Instalar).');
+      }
     }
   };
 
