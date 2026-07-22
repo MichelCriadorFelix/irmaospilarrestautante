@@ -11,7 +11,7 @@ export default defineConfig(() => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'icon-192.jpg', 'icon-512.jpg'],
+        includeAssets: ['favicon.ico', 'icon-192.png', 'icon-512.png'],
         manifest: {
           name: 'Irmãos Pilar',
           short_name: 'Irmãos Pilar',
@@ -21,14 +21,15 @@ export default defineConfig(() => {
           display: 'standalone',
           icons: [
             {
-              src: 'icon-192.jpg',
+              src: 'icon-192.png',
               sizes: '192x192',
-              type: 'image/jpeg'
+              type: 'image/png'
             },
             {
-              src: 'icon-512.jpg',
+              src: 'icon-512.png',
               sizes: '512x512',
-              type: 'image/jpeg'
+              type: 'image/png',
+              purpose: 'any maskable'
             }
           ]
         },

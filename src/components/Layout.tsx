@@ -30,6 +30,8 @@ export default function Layout() {
   const { items } = useCart();
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isStandalone, setIsStandalone] = useState(false);
+  const [showInstallBanner, setShowInstallBanner] = useState(true);
+  const [showIosInstructions, setShowIosInstructions] = useState(false);
   const [logoError, setLogoError] = useState(false);
   const [companyInfo, setCompanyInfo] = useState<{ name: string; logoUrl?: string }>({
     name: "Irmãos Pilar"
@@ -70,6 +72,16 @@ export default function Layout() {
     };
   }, []);
 
+  
+  const isIos = () => {
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    return /iphone|ipad|ipod/.test(userAgent);
+  };
+  const isAndroid = () => {
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    return /android/.test(userAgent);
+  };
+  
   const handleInstallClick = async () => {
     const promptEvent = (window as any).deferredPrompt || deferredPrompt;
     
@@ -79,14 +91,20 @@ export default function Layout() {
         const choiceResult = await promptEvent.userChoice;
         if (choiceResult.outcome === 'accepted') {
           console.log('User accepted the install prompt');
+          setShowInstallBanner(false);
         }
       } catch (e) {
         console.error(e);
       }
       (window as any).deferredPrompt = null;
       setDeferredPrompt(null);
+    } else if (isIos()) {
+      setShowIosInstructions(true);
+    } else {
+      alert('Seu navegador não suporta instalação direta ou o app já está instalado.');
     }
   };
+
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center">Carregando...</div>;
@@ -100,7 +118,79 @@ export default function Layout() {
   const isAdmin = user?.role === 'admin';
 
   return (
-    <div className="min-h-[100dvh] bg-canvas text-text-main flex flex-col md:flex-row font-sans">
+    
+  <div className="flex flex-col min-h-[100dvh]">
+
+      {/* GLOBAL INSTALL BANNER */}
+      {user && !isStandalone && showInstallBanner && (
+        <div className="bg-brand text-white px-4 py-2.5 flex items-center justify-between shadow-md z-50 sticky top-0 w-full">
+          <div className="flex items-center gap-3">
+            <div className="bg-white/20 p-1.5 rounded-lg">
+              <Download size={18} className="animate-bounce" />
+            </div>
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-wider leading-tight">Instale nosso App!</p>
+              <p className="text-[9px] text-white/80 font-medium">Mais rápido e não ocupa memória.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={handleInstallClick}
+              className="bg-white text-brand px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-widest hover:bg-gray-100 transition-colors shadow-sm"
+            >
+              Instalar
+            </button>
+            <button onClick={() => setShowInstallBanner(false)} className="p-1 text-white/60 hover:text-white transition-colors">
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* IOS INSTRUCTIONS MODAL */}
+      {showIosInstructions && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={() => setShowIosInstructions(false)}>
+          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl relative animate-fade-in" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setShowIosInstructions(false)} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 bg-gray-100 rounded-full">
+              <X size={20} />
+            </button>
+            
+            <div className="w-16 h-16 bg-brand/10 rounded-2xl flex items-center justify-center mb-6 mx-auto">
+              <Smartphone size={32} className="text-brand" />
+            </div>
+            
+            <h3 className="text-center font-black text-lg text-gray-900 mb-2 uppercase tracking-wide">Instalar no iPhone</h3>
+            <p className="text-center text-sm text-gray-500 font-medium mb-8">Para instalar nosso app no seu iPhone ou iPad, siga os passos abaixo:</p>
+            
+            <div className="space-y-4">
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 font-black text-gray-600 text-sm">1</div>
+                <div>
+                  <p className="text-sm text-gray-800 font-bold">Toque em Compartilhar</p>
+                  <p className="text-xs text-gray-500 mt-1">Na barra inferior do Safari, toque no ícone com uma seta para cima.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 font-black text-gray-600 text-sm">2</div>
+                <div>
+                  <p className="text-sm text-gray-800 font-bold">Adicionar à Tela de Início</p>
+                  <p className="text-xs text-gray-500 mt-1">Role a lista para baixo e toque nesta opção (ícone de [ + ]).</p>
+                </div>
+              </div>
+            </div>
+            
+            <button 
+              onClick={() => setShowIosInstructions(false)}
+              className="w-full bg-brand text-white py-4 rounded-xl font-black uppercase tracking-widest text-xs mt-8 hover:bg-brand-dark transition-colors"
+            >
+              Entendi
+            </button>
+          </div>
+        </div>
+      )}
+
+    <div className="flex-1 bg-canvas text-text-main flex flex-col md:flex-row font-sans relative">
+
       {/* HEADER FOR MOBILE (md:hidden) */}
       <header className="bg-dark text-white h-14 px-4 flex items-center justify-between border-b border-gray-800 md:hidden sticky top-0 z-40">
         <div className="flex items-center space-x-2.5">
@@ -118,11 +208,7 @@ export default function Layout() {
         </div>
         
         <div className="flex items-center space-x-3">
-          {(!isStandalone && ((window as any).deferredPrompt || deferredPrompt)) && (
-            <button onClick={handleInstallClick} className="p-1.5 text-gray-400 hover:text-white transition-colors" title="Instalar App">
-              <Download size={18} className="animate-bounce-slow" />
-            </button>
-          )}
+          
           {user && (
             <button onClick={handleLogout} className="p-1.5 text-gray-400 hover:text-red-400 transition-colors" title="Sair">
               <LogOut size={18} />
@@ -180,15 +266,7 @@ export default function Layout() {
         {/* Desktop Install / Logout footer */}
         {user && (
           <div className="p-4 border-t border-gray-800">
-            {(!isStandalone && ((window as any).deferredPrompt || deferredPrompt)) && (
-              <button 
-                onClick={handleInstallClick}
-                className="w-full flex items-center justify-center space-x-2 px-3 py-2 mb-3 rounded-lg bg-brand hover:bg-brand-dark transition-colors"
-              >
-                <Download size={16} />
-                <span className="text-xs font-bold uppercase tracking-wider">Instalar App</span>
-              </button>
-            )}
+            
             <div className="text-[10px] mb-2 px-3 text-gray-500 font-bold uppercase tracking-widest truncate">{user.name}</div>
             <button 
               onClick={handleLogout}
@@ -233,7 +311,8 @@ export default function Layout() {
       <main className="flex-1 w-full relative pb-20 md:pb-0">
         <Outlet />
       </main>
-    </div>
+        </div>
+  </div>
   );
 }
 
