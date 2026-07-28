@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
-import { formatCurrency } from '../lib/utils';
+import { formatCurrency, calculateDistance } from '../lib/utils';
 import { collection, addDoc, doc, onSnapshot } from 'firebase/firestore';
 import { db, sanitizeForFirestore } from '../lib/firebase';
 import { useNavigate } from 'react-router-dom';
@@ -85,8 +85,29 @@ export default function Cart() {
       ? parseFloat(changeFor.replace(',', '.')) || null
       : null;
 
+    const restaurantLat = -22.8654801;
+    const restaurantLng = -43.3012176;
+
+    let finalDeliveryFee = companyInfo?.deliveryFee || 0;
+
+    if (companyInfo?.deliveryRadiusKm) {
+      if (user.lat && user.lng) {
+        const distance = calculateDistance(restaurantLat, restaurantLng, user.lat, user.lng);
+        if (distance > companyInfo.deliveryRadiusKm * 1000) {
+          setAlertState({
+            type: 'error',
+            message: 'Fora da área de entrega',
+            submessage: `Desculpe, o seu endereço está a ${(distance/1000).toFixed(1)}km, o que ultrapassa o nosso raio máximo de entrega (${companyInfo.deliveryRadiusKm}km).`
+          });
+          return;
+        }
+      }
+    }
+
+    const finalTotal = total + finalDeliveryFee;
+
     if (paymentMethod === 'cash' && needChange === true) {
-      if (!parsedChangeFor || parsedChangeFor <= total) {
+      if (!parsedChangeFor || parsedChangeFor <= finalTotal) {
         setAlertState({
           type: 'error',
           message: 'Troco Inválido',
@@ -103,7 +124,8 @@ export default function Cart() {
         userName: user.name,
         userPhone: user.phone,
         items,
-        total,
+        total: finalTotal,
+        deliveryFee: finalDeliveryFee,
         status: 'pending_payment',
         paymentMethod,
         changeRequested: paymentMethod === 'cash' && needChange === true,
@@ -187,9 +209,21 @@ export default function Cart() {
             </li>
           ))}
         </ul>
-        <div className="bg-gray-50 px-4 py-4 flex justify-between items-center border-t border-gray-100">
-          <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Total</span>
-          <span className="text-lg font-black text-brand">{formatCurrency(total)}</span>
+        <div className="bg-gray-50 px-4 py-4 border-t border-gray-100 flex flex-col gap-2">
+          <div className="flex justify-between items-center text-sm">
+            <span className="text-gray-500 font-bold">Subtotal</span>
+            <span className="font-black text-gray-900">{formatCurrency(total)}</span>
+          </div>
+          {companyInfo?.deliveryFee != null && companyInfo.deliveryFee > 0 && (
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-500 font-bold">Taxa de Entrega</span>
+              <span className="font-black text-gray-900">{formatCurrency(companyInfo.deliveryFee)}</span>
+            </div>
+          )}
+          <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200">
+            <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Total</span>
+            <span className="text-lg font-black text-brand">{formatCurrency(total + (companyInfo?.deliveryFee || 0))}</span>
+          </div>
         </div>
       </div>
 
@@ -426,9 +460,9 @@ export default function Cart() {
                     className="w-full pl-9 pr-3 py-2 border border-gray-200 focus:border-brand focus:ring-brand rounded-lg text-xs font-bold bg-white"
                   />
                 </div>
-                {changeFor && parseFloat(changeFor.replace(',', '.')) <= total && (
+                {changeFor && parseFloat(changeFor.replace(',', '.')) <= (total + (companyInfo?.deliveryFee || 0)) && (
                   <p className="text-[9px] text-red-500 font-bold uppercase tracking-wider">
-                    O valor para o troco deve ser maior que o total do pedido ({formatCurrency(total)}).
+                    O valor para o troco deve ser maior que o total do pedido ({formatCurrency(total + (companyInfo?.deliveryFee || 0))}).
                   </p>
                 )}
               </div>
@@ -463,7 +497,7 @@ export default function Cart() {
                   closedBlock ||
                   isProfileIncomplete || 
                   (paymentMethod === 'cash' && needChange === null) ||
-                  (paymentMethod === 'cash' && needChange === true && (!changeFor.trim() || parseFloat(changeFor.replace(',', '.')) <= total))
+                  (paymentMethod === 'cash' && needChange === true && (!changeFor.trim() || parseFloat(changeFor.replace(',', '.')) <= (total + (companyInfo?.deliveryFee || 0))))
                 }
                 className="w-full sm:w-auto bg-brand text-white px-8 py-3 rounded-lg font-bold text-xs uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
               >

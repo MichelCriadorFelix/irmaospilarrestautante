@@ -122,11 +122,46 @@ export default function Profile() {
     if (formData.addressReference) parts.push(`Ref: ${formData.addressReference}`);
     
     const combinedAddress = parts.join(' - ');
+    
+    // Try to geocode the address
+    let lat: number | undefined;
+    let lng: number | undefined;
+    
+    if (formData.addressStreet && formData.addressCity && formData.addressZip) {
+      try {
+        const query = `${formData.addressStreet} ${formData.addressNumber || ''}, ${formData.addressNeighborhood}, ${formData.addressCity}, ${formData.addressZip}, Brasil`;
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`, {
+          headers: {
+            'User-Agent': 'Restaurante-App'
+          }
+        });
+        const geodata = await res.json();
+        if (geodata && geodata.length > 0) {
+          lat = parseFloat(geodata[0].lat);
+          lng = parseFloat(geodata[0].lon);
+        } else {
+          // Fallback to cep search if full address fails
+          const cepQuery = `${formData.addressZip}, Brasil`;
+          const fallbackRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cepQuery)}`, {
+            headers: { 'User-Agent': 'Restaurante-App' }
+          });
+          const fallbackData = await fallbackRes.json();
+          if (fallbackData && fallbackData.length > 0) {
+            lat = parseFloat(fallbackData[0].lat);
+            lng = parseFloat(fallbackData[0].lon);
+          }
+        }
+      } catch (e) {
+        console.error("Geocoding failed", e);
+      }
+    }
 
     // Update with both split values and the unified address
     await updateUser({
       ...formData,
       address: combinedAddress,
+      lat,
+      lng
     });
 
     setSaved(true);

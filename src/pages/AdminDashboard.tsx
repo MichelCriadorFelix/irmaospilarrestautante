@@ -1211,6 +1211,34 @@ export default function AdminDashboard() {
               </div>
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-gray-100 pt-4">
+              <div>
+                <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Raio de Entrega (Metros)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="100"
+                  value={companyInfo.deliveryRadiusKm ? companyInfo.deliveryRadiusKm * 1000 : ''}
+                  onChange={e => setCompanyInfo({ ...companyInfo, deliveryRadiusKm: e.target.value ? Number(e.target.value) / 1000 : 0 })}
+                  placeholder="Ex: 2500"
+                  className="w-full border border-gray-200 bg-gray-50 rounded-lg py-2 px-3 text-xs font-bold text-gray-800 focus:ring-brand focus:border-brand"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Taxa de Entrega (R$)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={companyInfo.deliveryFee ?? ''}
+                  onChange={e => setCompanyInfo({ ...companyInfo, deliveryFee: e.target.value ? Number(e.target.value) : 0 })}
+                  placeholder="Ex: 5.00"
+                  className="w-full border border-gray-200 bg-gray-50 rounded-lg py-2 px-3 text-xs font-bold text-gray-800 focus:ring-brand focus:border-brand"
+                />
+              </div>
+            </div>
+
             {/* MANUAL OVERRIDE (FORCE CLOSED) */}
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-6">
               <div className="flex items-center justify-between">

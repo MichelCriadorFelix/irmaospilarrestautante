@@ -438,8 +438,14 @@ export default function OrderDetails() {
           <div class="total-section">
             <div class="item">
               <span>SUBTOTAL:</span>
-              <span>${formatCurrency(order.total)}</span>
+              <span>${formatCurrency(order.total - (order.deliveryFee || 0))}</span>
             </div>
+            ${order.deliveryFee ? `
+            <div class="item">
+              <span>TAXA ENTREGA:</span>
+              <span>${formatCurrency(order.deliveryFee)}</span>
+            </div>
+            ` : ''}
             <div class="item">
               <span>TOTAL:</span>
               <span>${formatCurrency(order.total)}</span>
@@ -685,9 +691,21 @@ export default function OrderDetails() {
                 </li>
               ))}
             </ul>
-            <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between items-center">
-              <span className="font-bold text-xs uppercase tracking-widest text-gray-500">Total</span>
-              <span className="font-black text-lg text-brand">{formatCurrency(order.total)}</span>
+            <div className="mt-3 pt-3 border-t border-gray-100 flex flex-col gap-2">
+              <div className="flex justify-between items-center text-sm">
+                <span className="font-bold text-gray-500">Subtotal</span>
+                <span className="font-black text-gray-900">{formatCurrency(order.total - (order.deliveryFee || 0))}</span>
+              </div>
+              {order.deliveryFee != null && order.deliveryFee > 0 && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="font-bold text-gray-500">Taxa de Entrega</span>
+                  <span className="font-black text-gray-900">{formatCurrency(order.deliveryFee)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                <span className="font-bold text-xs uppercase tracking-widest text-gray-500">Total</span>
+                <span className="font-black text-lg text-brand">{formatCurrency(order.total)}</span>
+              </div>
             </div>
           </div>
 

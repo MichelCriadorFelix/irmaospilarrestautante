@@ -14,6 +14,8 @@ export interface User {
   addressState?: string;
   addressZip?: string;
   addressReference?: string;
+  lat?: number;
+  lng?: number;
   role: Role;
   createdAt: number;
   emailVerified?: boolean;
@@ -47,6 +49,7 @@ export interface Order {
   userName: string;
   items: CartItem[];
   total: number;
+  deliveryFee?: number;
   status: OrderStatus;
   paymentMethod: 'pix' | 'credit' | 'debit' | 'cash';
   receiptUrl?: string;
@@ -93,5 +96,7 @@ export interface CompanyInfo {
   openingHours?: {
     [key: string]: DayHours;
   };
+  deliveryRadiusKm?: number;
+  deliveryFee?: number;
 }
 
