@@ -221,7 +221,9 @@ export default function AdminDashboard() {
           pixKeyName: data.pixKeyName || '',
           logoUrl: data.logoUrl,
           forceClosed: data.forceClosed || false,
-          openingHours: data.openingHours || DEFAULT_OPENING_HOURS
+          openingHours: data.openingHours || DEFAULT_OPENING_HOURS,
+          deliveryRadiusKm: data.deliveryRadiusKm || 0,
+          deliveryFee: data.deliveryFee || 0
         });
       }
     }, (err) => {
