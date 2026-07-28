@@ -85,22 +85,54 @@ export default function Cart() {
       ? parseFloat(changeFor.replace(',', '.')) || null
       : null;
 
+    setLoading(true);
+
     const restaurantLat = -22.8654801;
     const restaurantLng = -43.3012176;
 
     let finalDeliveryFee = companyInfo?.deliveryFee || 0;
 
     if (companyInfo?.deliveryRadiusKm) {
-      if (user.lat && user.lng) {
-        const distance = calculateDistance(restaurantLat, restaurantLng, user.lat, user.lng);
+      let userLat = user.lat;
+      let userLng = user.lng;
+
+      if (!userLat || !userLng) {
+        if (user.addressStreet && user.addressCity && user.addressZip) {
+          try {
+            const query = `${user.addressStreet} ${user.addressNumber || ''}, ${user.addressNeighborhood}, ${user.addressCity}, ${user.addressZip}, Brasil`;
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`, {
+              headers: { 'User-Agent': 'Restaurante-App' }
+            });
+            const geodata = await res.json();
+            if (geodata && geodata.length > 0) {
+              userLat = parseFloat(geodata[0].lat);
+              userLng = parseFloat(geodata[0].lon);
+            }
+          } catch (e) {
+            console.error("Geocoding on checkout failed", e);
+          }
+        }
+      }
+
+      if (userLat && userLng) {
+        const distance = calculateDistance(restaurantLat, restaurantLng, userLat, userLng);
         if (distance > companyInfo.deliveryRadiusKm * 1000) {
           setAlertState({
             type: 'error',
             message: 'Fora da área de entrega',
             submessage: `Desculpe, o seu endereço está a ${(distance/1000).toFixed(1)}km, o que ultrapassa o nosso raio máximo de entrega (${companyInfo.deliveryRadiusKm}km).`
           });
+          setLoading(false);
           return;
         }
+      } else {
+        setAlertState({
+          type: 'error',
+          message: 'Endereço não localizado',
+          submessage: 'Não conseguimos calcular a distância para o seu endereço. Por favor, edite seu perfil e verifique se os dados estão corretos.'
+        });
+        setLoading(false);
+        return;
       }
     }
 
@@ -113,11 +145,11 @@ export default function Cart() {
           message: 'Troco Inválido',
           submessage: 'Por favor, informe um valor de troco válido e maior que o total do pedido.'
         });
+        setLoading(false);
         return;
       }
     }
     
-    setLoading(true);
     try {
       const orderPayload = sanitizeForFirestore({
         userId: user.uid,
