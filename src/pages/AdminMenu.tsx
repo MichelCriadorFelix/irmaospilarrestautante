@@ -241,7 +241,7 @@ export default function AdminMenu() {
               filteredProducts.map(product => (
                 <tr key={product.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3">
-                    <div className="text-xs font-bold text-gray-900 leading-tight">{product.name}</div>
+                    <div className="text-xs font-bold text-gray-900 leading-tight" translate="no">{product.name}</div>
                     <div className="text-[10px] text-gray-500 truncate max-w-[200px] mt-0.5">{product.description}</div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-[10px] font-bold uppercase tracking-widest text-gray-500">

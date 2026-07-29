@@ -138,7 +138,7 @@ export default function Orders() {
                     <div className="mt-1 font-black text-gray-900">{formatCurrency(order.total)}</div>
                   </div>
                 </div>
-                <p className="text-[10px] text-gray-500 truncate border-t border-gray-50 pt-3">
+                <p className="text-[10px] text-gray-500 truncate border-t border-gray-50 pt-3" translate="no">
                   {order.items.map(i => `${i.quantity}x ${i.product.name}`).join(', ')}
                 </p>
               </Link>

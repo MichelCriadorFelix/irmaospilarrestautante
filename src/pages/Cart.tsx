@@ -243,7 +243,7 @@ export default function Cart() {
           {items.map((item, index) => (
             <li key={index} className="px-4 py-4 flex justify-between items-center">
               <div>
-                <h4 className="text-sm font-bold text-gray-900">{item.product.name}</h4>
+                <h4 className="text-sm font-bold text-gray-900" translate="no">{item.product.name}</h4>
                 <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-widest font-bold">
                   {item.product.category === 'refeicao' && (
                     <>

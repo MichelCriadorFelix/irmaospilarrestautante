@@ -249,7 +249,7 @@ export default function Home() {
                 )}
 
                 <div className="w-full bg-gray-50 rounded-xl border border-gray-100 p-4 mb-6 text-left">
-                  <h4 className="text-xs font-black text-gray-900 mb-1">
+                  <h4 className="text-xs font-black text-gray-900 mb-1" translate="no">
                     {pendingAdd.product.name}
                   </h4>
                   {pendingAdd.product.description && (
@@ -379,7 +379,7 @@ function ProductCard({
       <div>
         <div className="flex justify-between items-start mb-1">
           <div className="flex-1">
-            <h3 className="text-xs font-bold text-gray-900 leading-tight">{product.name}</h3>
+            <h3 className="text-xs font-bold text-gray-900 leading-tight" translate="no">{product.name}</h3>
             {product.description && <p className="text-[9px] text-gray-500 mt-0.5 line-clamp-2">{product.description}</p>}
           </div>
           <div className="text-right ml-2">

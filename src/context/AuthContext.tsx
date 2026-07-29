@@ -55,12 +55,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const isOwner = email === 'michelgeminicriador@gmail.com' || email === 'felixcastroadv@gmail.com';
 
     if (userSnap.exists()) {
+      const data = userSnap.data();
+      const currentRole = data.role || 'user';
+      const shouldBeAdmin = isOwner && currentRole !== 'admin';
+      
       userData = { 
-        ...userSnap.data(), 
+        ...data, 
         uid: firebaseUser.uid, 
         email: email,
-        role: isOwner ? 'admin' : (userSnap.data().role || 'user')
+        role: isOwner ? 'admin' : currentRole
       } as User;
+
+      if (shouldBeAdmin) {
+        await setDoc(userRef, userData, { merge: true });
+      }
     } else {
       // Default to 'user' role unless this is one of the two hardcoded
       // restaurant-owner accounts (also enforced server-side in

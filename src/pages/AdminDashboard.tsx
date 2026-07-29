@@ -578,7 +578,7 @@ export default function AdminDashboard() {
                             #{order.id.slice(-6).toUpperCase()}
                           </span>
                         </div>
-                        <p className="text-[10px] text-gray-500 mt-1 font-semibold leading-relaxed max-w-lg truncate">
+                        <p className="text-[10px] text-gray-500 mt-1 font-semibold leading-relaxed max-w-lg truncate" translate="no">
                           {order.items.map(i => `${i.quantity}x ${i.product.name}`).join(' • ')}
                         </p>
                         {order.notes && (
@@ -742,7 +742,7 @@ export default function AdminDashboard() {
                           <div className="space-y-0.5">
                             {order.items.map((item, idx) => (
                               <div key={idx} className="text-[10px] text-gray-600 truncate max-w-xs">
-                                <strong className="text-gray-900">{item.quantity}x</strong> {item.product.name} 
+                                <strong className="text-gray-900">{item.quantity}x</strong> <span translate="no">{item.product.name}</span> 
                                 <span className="text-[9px] text-gray-400 ml-1">({item.selectedSize})</span>
                               </div>
                             ))}
@@ -895,7 +895,7 @@ export default function AdminDashboard() {
                     return (
                       <div key={idx} className="space-y-1">
                         <div className="flex justify-between items-center text-xs">
-                          <span className="font-bold text-gray-800">{idx + 1}º {prod.name}</span>
+                          <span className="font-bold text-gray-800">{idx + 1}º <span translate="no">{prod.name}</span></span>
                           <span className="font-black text-gray-900">{prod.quantity} unidades <span className="text-[10px] text-gray-400">({formatCurrency(prod.revenue)})</span></span>
                         </div>
                         <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">

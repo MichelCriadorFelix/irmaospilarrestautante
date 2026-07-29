@@ -382,19 +382,21 @@ export default function OrderDetails() {
               font-family: 'Courier New', Courier, monospace; 
               font-size: ${size === '80mm' ? '14px' : '12px'};
               line-height: 1.2;
-              color: black;
+              color: #000;
+              font-weight: 700;
             }
-            .header { text-align: center; margin-bottom: 10px; border-bottom: 1px dashed black; padding-bottom: 10px; }
-            .title { font-weight: bold; font-size: 1.2em; text-transform: uppercase; }
-            .section { margin-bottom: 10px; border-bottom: 1px dashed black; padding-bottom: 5px; }
-            .item { display: flex; justify-content: space-between; margin-bottom: 5px; }
-            .item-details { padding-left: 10px; font-size: 0.9em; font-style: italic; }
-            .total-section { font-weight: bold; font-size: 1.1em; text-align: right; }
-            .footer { text-align: center; margin-top: 15px; font-size: 0.8em; }
-            .label { font-weight: bold; text-transform: uppercase; font-size: 0.85em; }
-            .divider { border-top: 1px dashed black; margin: 5px 0; }
+            .header { text-align: center; margin-bottom: 10px; border-bottom: 2px dashed #000; padding-bottom: 10px; }
+            .title { font-weight: 900; font-size: 1.3em; text-transform: uppercase; }
+            .section { margin-bottom: 10px; border-bottom: 2px dashed #000; padding-bottom: 5px; }
+            .item { display: flex; justify-content: space-between; margin-bottom: 5px; font-weight: 800; }
+            .item-details { padding-left: 10px; font-size: 0.95em; font-weight: 600; }
+            .total-section { font-weight: 900; font-size: 1.2em; text-align: right; }
+            .footer { text-align: center; margin-top: 15px; font-size: 0.9em; font-weight: 800; }
+            .label { font-weight: 900; text-transform: uppercase; font-size: 0.9em; margin-bottom: 3px; }
+            .divider { border-top: 2px dashed #000; margin: 5px 0; }
             @media print {
               .no-print { display: none; }
+              * { color: #000 !important; }
             }
           </style>
         </head>
@@ -425,7 +427,7 @@ export default function OrderDetails() {
             <div class="label" style="margin-bottom: 5px;">Itens do Pedido:</div>
             ${order.items.map(item => `
               <div class="item">
-                <span>${item.quantity}x ${item.product.name}</span>
+                <span class="notranslate" translate="no">${item.quantity}x ${item.product.name}</span>
                 ${!isKitchen ? `<span>${formatCurrency(item.totalPrice)}</span>` : ''}
               </div>
               ${item.selectedOption ? `<div class="item-details">- Opção: ${item.selectedOption}</div>` : ''}
@@ -682,7 +684,7 @@ export default function OrderDetails() {
               {order.items.map((item, idx) => (
                 <li key={idx} className="py-2 flex justify-between items-center">
                   <div>
-                    <span className="font-bold text-sm text-gray-900">{item.quantity}x {item.product.name}</span>
+                    <span className="font-bold text-sm text-gray-900" translate="no">{item.quantity}x {item.product.name}</span>
                     <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mt-0.5">
                       {item.selectedSize} {item.selectedOption && `• ${item.selectedOption}`}
                     </p>
