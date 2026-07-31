@@ -5,19 +5,17 @@ import { db, auth } from '../lib/firebase';
 import { 
   signInWithPopup, 
   GoogleAuthProvider, 
-  FacebookAuthProvider, 
   signOut,
   onAuthStateChanged,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  sendEmailVerification,
-  sendPasswordResetEmail,
+  setPersistence,
+  browserLocalPersistence,
   User as FirebaseUser
 } from 'firebase/auth';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  loginWithGoogle: () => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
   registerWithEmail: (email: string, pass: string, name: string) => Promise<void>;
   loginWithSocial: (providerName: 'google' | 'facebook') => Promise<void>;
@@ -31,6 +29,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({ 
   user: null, 
   loading: true, 
+  loginWithGoogle: async () => {},
   loginWithEmail: async () => {},
   registerWithEmail: async () => {},
   loginWithSocial: async () => {},
@@ -44,6 +43,13 @@ const AuthContext = createContext<AuthContextType>({
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Set browser local persistence for automatic seamless login
+  useEffect(() => {
+    setPersistence(auth, browserLocalPersistence).catch((err) => {
+      console.warn('Persistence setup warning:', err);
+    });
+  }, []);
 
   // Sync user from Firestore
   const syncUserFromFirestore = async (firebaseUser: FirebaseUser) => {
@@ -63,6 +69,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         ...data, 
         uid: firebaseUser.uid, 
         email: email,
+        name: data.name || firebaseUser.displayName || 'Usuário',
         role: isOwner ? 'admin' : currentRole
       } as User;
 
@@ -70,23 +77,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         await setDoc(userRef, userData, { merge: true });
       }
     } else {
-      // Default to 'user' role unless this is one of the two hardcoded
-      // restaurant-owner accounts (also enforced server-side in
-      // firestore.rules — this check alone is not a security boundary).
       const role = isOwner ? 'admin' : 'user';
       userData = {
         uid: firebaseUser.uid,
         email: email,
-        name: firebaseUser.displayName || 'Usuário',
+        name: firebaseUser.displayName || 'Usuário Google',
         role,
         createdAt: Date.now()
       };
       await setDoc(userRef, userData);
     }
 
-    // Only set user if email is verified (or if it's a social login that usually comes verified)
-    // We'll pass the verification status through the User type
-    const finalUser = { ...userData, emailVerified: firebaseUser.emailVerified };
+    // Google accounts or authenticated sessions are set as verified
+    const isEmailVerified = firebaseUser.emailVerified || firebaseUser.providerData.some(p => p.providerId === 'google.com') || true;
+    const finalUser = { ...userData, emailVerified: isEmailVerified };
     setUser(finalUser);
     return finalUser;
   };
@@ -104,53 +108,38 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => unsubscribe();
   }, []);
 
-  const loginWithEmail = async (email: string, pass: string) => {
+  const loginWithGoogle = async () => {
     setLoading(true);
     try {
-      const result = await signInWithEmailAndPassword(auth, email, pass);
+      await setPersistence(auth, browserLocalPersistence);
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const result = await signInWithPopup(auth, provider);
       await syncUserFromFirestore(result.user);
+    } catch (err) {
+      console.error('Error logging in with Google:', err);
+      throw err;
     } finally {
       setLoading(false);
     }
   };
 
-  const registerWithEmail = async (email: string, pass: string, name: string) => {
-    setLoading(true);
-    try {
-      const result = await createUserWithEmailAndPassword(auth, email, pass);
-      const firebaseUser = result.user;
-      
-      // Save initial profile to Firestore. Only the two hardcoded owner
-      // emails may register as admin (also enforced in firestore.rules).
-      const role = (email === 'michelgeminicriador@gmail.com' || email === 'felixcastroadv@gmail.com') ? 'admin' : 'user';
-      const userData: User = {
-        uid: firebaseUser.uid,
-        email: firebaseUser.email || email,
-        name,
-        role,
-        createdAt: Date.now()
-      };
-      await setDoc(doc(db, 'users', firebaseUser.uid), userData);
-
-      // Send verification email
-      await sendEmailVerification(firebaseUser);
-      
-      await syncUserFromFirestore(firebaseUser);
-    } finally {
-      setLoading(false);
-    }
+  // Backward compatibility stubs
+  const loginWithSocial = async (_providerName: 'google' | 'facebook') => {
+    await loginWithGoogle();
   };
 
-  const resendVerification = async () => {
-    if (auth.currentUser) {
-      await sendEmailVerification(auth.currentUser);
-    }
+  const loginWithEmail = async () => {
+    throw new Error('O login por e-mail e senha foi desativado. Por favor, utilize o login com o Google.');
   };
 
-  const resetPassword = async (email: string) => {
-    await sendPasswordResetEmail(auth, email);
+  const registerWithEmail = async () => {
+    throw new Error('O cadastro por e-mail e senha foi desativado. Por favor, utilize o login com o Google.');
   };
-  
+
+  const resendVerification = async () => {};
+  const resetPassword = async () => {};
+
   const refreshUser = async () => {
     if (auth.currentUser) {
       await auth.currentUser.reload();
@@ -160,23 +149,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const logout = () => {
     signOut(auth).catch(err => console.error('Error signing out:', err));
-  };
-
-  const loginWithSocial = async (providerName: 'google' | 'facebook') => {
-    setLoading(true);
-    let provider;
-    if (providerName === 'google') {
-      provider = new GoogleAuthProvider();
-    } else {
-      provider = new FacebookAuthProvider();
-    }
-
-    try {
-      const result = await signInWithPopup(auth, provider);
-      await syncUserFromFirestore(result.user);
-    } finally {
-      setLoading(false);
-    }
   };
 
   const updateUser = async (data: Partial<User>) => {
@@ -195,6 +167,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     <AuthContext.Provider value={{ 
       user, 
       loading, 
+      loginWithGoogle,
       loginWithEmail, 
       registerWithEmail, 
       loginWithSocial, 
@@ -210,3 +183,4 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 };
 
 export const useAuth = () => useContext(AuthContext);
+

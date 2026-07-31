@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, where, orderBy, onSnapshot, getDocs } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, getDocs, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -32,7 +32,8 @@ export default function Orders() {
     const q = query(
       collection(db, 'orders'),
       where('userId', '==', user.uid),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(100)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {

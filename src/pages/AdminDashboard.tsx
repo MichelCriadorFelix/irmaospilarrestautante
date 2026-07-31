@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { collection, query, orderBy, onSnapshot, where, doc, setDoc } from 'firebase/firestore';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { collection, query, orderBy, onSnapshot, where, doc, setDoc, limit } from 'firebase/firestore';
 
 import { db, storage, sanitizeForFirestore, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Order, FinanceEntry, CompanyInfo } from '../types';
@@ -231,7 +231,7 @@ export default function AdminDashboard() {
     });
 
     // Load finances for cost analysis
-    const unsubFinances = onSnapshot(collection(db, 'finances'), (snapshot) => {
+    const unsubFinances = onSnapshot(query(collection(db, 'finances'), orderBy('date', 'desc'), limit(500)), (snapshot) => {
       setFinances(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as FinanceEntry)));
     }, (err) => {
       handleFirestoreError(err, OperationType.LIST, 'finances');
@@ -240,7 +240,8 @@ export default function AdminDashboard() {
     // Load ALL orders for dynamic list filtering & history & CRM
     const qAll = query(
       collection(db, 'orders'),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(2000)
     );
 
     const unsubscribeOrders = onSnapshot(qAll, (snapshot) => {
@@ -292,7 +293,7 @@ export default function AdminDashboard() {
     });
 
     // Load All Users for Team Management
-    const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+    const unsubUsers = onSnapshot(query(collection(db, 'users'), limit(500)), (snapshot) => {
       setUsers(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => {
       handleFirestoreError(err, OperationType.LIST, 'users');
@@ -322,7 +323,7 @@ export default function AdminDashboard() {
   };
 
   // --- Calculations for Tab 2: Orders History ---
-  const filteredHistoryOrders = allOrders.filter(order => {
+  const filteredHistoryOrders = useMemo(() => allOrders.filter(order => {
     const matchSearch = 
       order.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -345,7 +346,7 @@ export default function AdminDashboard() {
     }
 
     return matchSearch && matchStatus && matchPayment && matchPeriod;
-  });
+  }), [allOrders, searchQuery, filterStatus, filterPayment, historyPeriod]);
 
   // --- Calculations for Tab 3: CRM ---
   const getCrmPeriodMs = (period: PeriodType): number => {
@@ -363,51 +364,87 @@ export default function AdminDashboard() {
     return 0;
   };
 
-  const startMs = getCrmPeriodMs(crmPeriod);
-  const crmOrders = allOrders.filter(o => o.createdAt >= startMs);
-  const crmCompletedOrders = crmOrders.filter(o => o.status === 'completed');
-  const crmCancelledOrders = crmOrders.filter(o => o.status === 'cancelled');
+  const {
+    crmRevenue,
+    crmCompletedCount,
+    crmAverageTicket,
+    crmCancelledCount,
+    crmTotalCount,
+    crmFixedCosts,
+    crmVariableCosts,
+    crmTotalCosts,
+    crmNetProfit,
+    topCrmProducts,
+    maxProductQuantity,
+    paymentBreakdown
+  } = useMemo(() => {
+    const startMs = getCrmPeriodMs(crmPeriod);
+    const crmOrders = allOrders.filter(o => o.createdAt >= startMs);
+    const crmCompletedOrders = crmOrders.filter(o => o.status === 'completed');
+    const crmCancelledOrders = crmOrders.filter(o => o.status === 'cancelled');
 
-  const crmRevenue = crmCompletedOrders.reduce((sum, o) => sum + o.total, 0);
-  const crmCompletedCount = crmCompletedOrders.length;
-  const crmAverageTicket = crmCompletedCount > 0 ? crmRevenue / crmCompletedCount : 0;
-  const crmCancelledCount = crmCancelledOrders.length;
-  const crmTotalCount = crmOrders.length;
+    const revenue = crmCompletedOrders.reduce((sum, o) => sum + o.total, 0);
+    const completedCount = crmCompletedOrders.length;
+    const averageTicket = completedCount > 0 ? revenue / completedCount : 0;
+    
+    // Finances
+    const crmFinances = finances.filter(f => f.date >= startMs);
+    const fixedCosts = crmFinances.filter(f => f.type === 'fixed_cost').reduce((sum, f) => sum + f.amount, 0);
+    const varCosts = crmFinances.filter(f => f.type === 'variable_cost').reduce((sum, f) => sum + f.amount, 0);
+    const totalCosts = fixedCosts + varCosts;
+    const netProfit = revenue - totalCosts;
 
-  // Filter finances for cost calculations
-  const crmFinances = finances.filter(f => f.date >= startMs);
-  const crmFixedCosts = crmFinances.filter(f => f.type === 'fixed_cost').reduce((sum, f) => sum + f.amount, 0);
-  const crmVariableCosts = crmFinances.filter(f => f.type === 'variable_cost').reduce((sum, f) => sum + f.amount, 0);
-  const crmTotalCosts = crmFixedCosts + crmVariableCosts;
-  const crmNetProfit = crmRevenue - crmTotalCosts;
-
-  // CRM: Top Products sold in selected period
-  const productQuantities: { [key: string]: { name: string; quantity: number; revenue: number } } = {};
-  crmCompletedOrders.forEach(order => {
-    order.items.forEach(item => {
-      const pid = item.product.id;
-      if (!productQuantities[pid]) {
-        productQuantities[pid] = { name: item.product.name, quantity: 0, revenue: 0 };
-      }
-      productQuantities[pid].quantity += item.quantity;
-      productQuantities[pid].revenue += item.totalPrice;
+    // Top Products
+    const productQuantities: { [key: string]: { name: string; quantity: number; revenue: number } } = {};
+    crmCompletedOrders.forEach(order => {
+      order.items.forEach(item => {
+        const pid = item.product.id;
+        if (!productQuantities[pid]) {
+          productQuantities[pid] = { name: item.product.name, quantity: 0, revenue: 0 };
+        }
+        productQuantities[pid].quantity += item.quantity;
+        productQuantities[pid].revenue += item.totalPrice;
+      });
     });
-  });
 
-  const topCrmProducts = Object.values(productQuantities)
-    .sort((a, b) => b.quantity - a.quantity)
-    .slice(0, 5);
+    const topProducts = Object.values(productQuantities)
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 5);
 
-  const maxProductQuantity = topCrmProducts.length > 0 ? Math.max(...topCrmProducts.map(p => p.quantity)) : 1;
+    const maxQty = topProducts.length > 0 ? Math.max(...topProducts.map(p => p.quantity)) : 1;
 
-  // CRM: Payment methods breakdown
-  const paymentBreakdown = { pix: 0, credit: 0, debit: 0, cash: 0 };
-  crmCompletedOrders.forEach(o => {
-    const method = o.paymentMethod || 'pix';
-    if (paymentBreakdown[method] !== undefined) {
-      paymentBreakdown[method] += o.total;
-    }
-  });
+    // Payment Methods
+    const pBreakdown = { pix: 0, credit: 0, debit: 0, cash: 0 };
+    crmCompletedOrders.forEach(o => {
+      const method = o.paymentMethod || 'pix';
+      if (pBreakdown[method] !== undefined) {
+        pBreakdown[method] += o.total;
+      }
+    });
+
+    return {
+      crmRevenue: revenue,
+      crmCompletedCount: completedCount,
+      crmAverageTicket: averageTicket,
+      crmCancelledCount: crmCancelledOrders.length,
+      crmTotalCount: crmOrders.length,
+      crmFixedCosts: fixedCosts,
+      crmVariableCosts: varCosts,
+      crmTotalCosts: totalCosts,
+      crmNetProfit: netProfit,
+      topCrmProducts: topProducts,
+      maxProductQuantity: maxQty,
+      paymentBreakdown: pBreakdown
+    };
+  }, [allOrders, finances, crmPeriod]);
+
+  const { activeOrdersCount, activeOrdersList } = useMemo(() => {
+    const list = allOrders.filter(o => o.status !== 'completed' && o.status !== 'cancelled');
+    return {
+      activeOrdersCount: list.length,
+      activeOrdersList: list
+    };
+  }, [allOrders]);
 
   // Recharts Data for selected period
   const rechartsCrmData = [
@@ -445,9 +482,9 @@ export default function AdminDashboard() {
         >
           <BellRing size={16} />
           <span>Monitore em Tempo Real</span>
-          {allOrders.filter(o => o.status !== 'completed' && o.status !== 'cancelled').length > 0 && (
+          {activeOrdersCount > 0 && (
             <span className="bg-brand text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold ml-1">
-              {allOrders.filter(o => o.status !== 'completed' && o.status !== 'cancelled').length}
+              {activeOrdersCount}
             </span>
           )}
         </button>
@@ -547,11 +584,11 @@ export default function AdminDashboard() {
                 <Package size={14} className="mr-2 text-brand" /> Pedidos em Andamento
               </h3>
               <span className="text-[10px] bg-brand/10 text-brand px-2 py-0.5 rounded font-bold uppercase tracking-wider">
-                Total: {allOrders.filter(o => o.status !== 'completed' && o.status !== 'cancelled').length}
+                Total: {activeOrdersCount}
               </span>
             </div>
 
-            {allOrders.filter(o => o.status !== 'completed' && o.status !== 'cancelled').length === 0 ? (
+            {activeOrdersCount === 0 ? (
               <div className="p-10 text-center text-xs text-gray-400 font-medium flex flex-col items-center justify-center space-y-2">
                 <Package size={36} className="text-gray-300" />
                 <p>Nenhum pedido em andamento no momento.</p>
@@ -559,7 +596,7 @@ export default function AdminDashboard() {
               </div>
             ) : (
               <div className="divide-y divide-gray-100">
-                {allOrders.filter(o => o.status !== 'completed' && o.status !== 'cancelled').map(order => (
+                {activeOrdersList.map(order => (
                   <Link 
                     key={order.id} 
                     to={`/admin/orders/${order.id}`} 

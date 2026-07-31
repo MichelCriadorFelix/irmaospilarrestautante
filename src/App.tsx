@@ -29,9 +29,6 @@ const ProtectedRoute = ({ children, adminOnly = false }: { children: React.React
   );
 
   if (!user) return <Navigate to="/login" />;
-  
-  // Requirement: Email must be verified to access protected routes
-  if (!user.emailVerified) return <Navigate to="/login" />;
 
   if (adminOnly && user.role !== 'admin') return <Navigate to="/" />;
   

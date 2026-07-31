@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { FinanceEntry, Order } from '../types';
 import { formatCurrency } from '../lib/utils';
@@ -17,11 +17,11 @@ export default function AdminFinances() {
   const [type, setType] = useState<'fixed_cost' | 'variable_cost'>('fixed_cost');
 
   useEffect(() => {
-    const unsubFinances = onSnapshot(query(collection(db, 'finances'), orderBy('date', 'desc')), (snapshot) => {
+    const unsubFinances = onSnapshot(query(collection(db, 'finances'), orderBy('date', 'desc'), limit(500)), (snapshot) => {
       setFinances(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FinanceEntry)));
     });
 
-    const unsubOrders = onSnapshot(query(collection(db, 'orders'), orderBy('createdAt', 'desc')), (snapshot) => {
+    const unsubOrders = onSnapshot(query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(2000)), (snapshot) => {
       setOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order)));
     });
 
