@@ -137,11 +137,22 @@ export default function AdminMenu() {
     }
   };
 
-  const filteredProducts = products.filter(product => 
-    product.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    product.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.category.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const [selectedCategory, setSelectedCategory] = useState<'all' | 'refeicao' | 'bebida' | 'unavailable'>('all');
+
+  const filteredProducts = products.filter(product => {
+    const matchesSearch = 
+      product.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      product.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.category.toLowerCase().includes(searchQuery.toLowerCase());
+
+    if (!matchesSearch) return false;
+
+    if (selectedCategory === 'refeicao') return product.category === 'refeicao';
+    if (selectedCategory === 'bebida') return product.category === 'bebida';
+    if (selectedCategory === 'unavailable') return !product.available;
+
+    return true;
+  });
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -207,79 +218,211 @@ export default function AdminMenu() {
         </div>
       )}
 
-      <div className="bg-white shadow-sm rounded-xl overflow-hidden border border-gray-100">
-        <div className="p-4 border-b border-gray-100 bg-gray-50 flex flex-col sm:flex-row gap-4 justify-between items-center">
-          <div className="relative w-full sm:w-96">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search size={16} className="text-gray-400" />
+      <div className="bg-white shadow-sm rounded-2xl overflow-hidden border border-gray-100 mb-8">
+        {/* Search and Filters Header */}
+        <div className="p-4 border-b border-gray-100 bg-gray-50/80 flex flex-col gap-3">
+          <div className="flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center">
+            <div className="relative w-full sm:w-96">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                <Search size={16} className="text-gray-400" />
+              </div>
+              <input
+                type="text"
+                placeholder="Buscar por nome, descrição ou categoria..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand shadow-2xs"
+              />
             </div>
-            <input
-              type="text"
-              placeholder="Buscar por nome, descrição ou categoria..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand"
-            />
+            <div className="text-[11px] font-black text-gray-500 uppercase tracking-wider self-end sm:self-auto">
+              {filteredProducts.length} {filteredProducts.length === 1 ? 'item' : 'itens'}
+            </div>
           </div>
-          <div className="text-xs font-bold text-gray-500 uppercase tracking-widest">
-            {filteredProducts.length} {filteredProducts.length === 1 ? 'item' : 'itens'}
+
+          {/* Filter Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
+            <button
+              onClick={() => setSelectedCategory('all')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition-all ${
+                selectedCategory === 'all'
+                  ? 'bg-gray-900 text-white shadow-xs'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              Todos ({products.length})
+            </button>
+            <button
+              onClick={() => setSelectedCategory('refeicao')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition-all ${
+                selectedCategory === 'refeicao'
+                  ? 'bg-brand text-white shadow-xs'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              Refeições ({products.filter(p => p.category === 'refeicao').length})
+            </button>
+            <button
+              onClick={() => setSelectedCategory('bebida')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition-all ${
+                selectedCategory === 'bebida'
+                  ? 'bg-brand text-white shadow-xs'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              Bebidas ({products.filter(p => p.category === 'bebida').length})
+            </button>
+            <button
+              onClick={() => setSelectedCategory('unavailable')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition-all ${
+                selectedCategory === 'unavailable'
+                  ? 'bg-rose-600 text-white shadow-xs'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              Indisponíveis ({products.filter(p => !p.available).length})
+            </button>
           </div>
         </div>
 
-        <table className="min-w-full divide-y divide-gray-100">
-          <thead className="bg-gray-50 border-b border-gray-100">
-            <tr>
-              <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Item</th>
-              <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Categoria</th>
-              <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Preço</th>
-              <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Status</th>
-              <th className="px-4 py-3 text-right text-[10px] font-bold text-gray-500 uppercase tracking-widest">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-50">
-            {filteredProducts.length > 0 ? (
-              filteredProducts.map(product => (
-                <tr key={product.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3">
-                    <div className="text-xs font-bold text-gray-900 leading-tight" translate="no">{product.name}</div>
-                    <div className="text-[10px] text-gray-500 truncate max-w-[200px] mt-0.5">{product.description}</div>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-[10px] font-bold uppercase tracking-widest text-gray-500">
-                    {product.category === 'refeicao' ? 'Refeição' : 'Bebida'}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900 font-black">
-                    {formatCurrency(product.price)}
-                    {product.priceOption2 && <span className="text-[9px] text-brand font-bold uppercase tracking-widest block mt-0.5">2 pedaços: {formatCurrency(product.priceOption2)}</span>}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
+        {/* MOBILE VIEW (Cards layout for small screens) */}
+        <div className="block md:hidden divide-y divide-gray-100">
+          {filteredProducts.length > 0 ? (
+            filteredProducts.map(product => (
+              <div key={product.id} className="p-4 hover:bg-gray-50/50 transition-colors">
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <h3 className="text-sm font-black text-gray-900 leading-snug" translate="no">
+                        {product.name}
+                      </h3>
+                      <span className="text-[9px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200/60">
+                        {product.category === 'refeicao' ? 'Refeição' : 'Bebida'}
+                      </span>
+                    </div>
+                    {product.description && (
+                      <p className="text-xs text-gray-500 line-clamp-2 mb-2 leading-relaxed">
+                        {product.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Price and Options */}
+                <div className="bg-gray-50 rounded-xl p-2.5 mb-3 border border-gray-100/80 flex items-center justify-between">
+                  <div>
+                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block">Preço</span>
+                    <span className="text-sm font-black text-gray-900">
+                      {formatCurrency(product.price)}
+                    </span>
+                  </div>
+                  {product.priceOption2 && (
+                    <div className="text-right">
+                      <span className="text-[9px] font-bold text-brand uppercase tracking-widest block">2 Pedaços</span>
+                      <span className="text-xs font-black text-brand">
+                        {formatCurrency(product.priceOption2)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Action Row */}
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <button 
+                    onClick={() => handleToggleAvailable(product)}
+                    className={`flex-1 min-h-[38px] px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all active:scale-98 ${
+                      product.available 
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100' 
+                        : 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${product.available ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                    {product.available ? 'Disponível' : 'Indisponível'}
+                  </button>
+
+                  <div className="flex items-center gap-1 shrink-0">
                     <button 
-                      onClick={() => handleToggleAvailable(product)}
-                      className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest transition-colors ${
-                        product.available ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'
-                      }`}
+                      onClick={() => handleEdit(product)} 
+                      className="min-h-[38px] px-3 bg-gray-100 hover:bg-brand/10 hover:text-brand text-gray-700 text-xs font-bold rounded-xl flex items-center gap-1 transition-colors active:scale-98"
+                      title="Editar"
                     >
-                      {product.available ? 'Disponível' : 'Indisponível'}
+                      <Edit size={15} />
+                      <span className="text-[10px] uppercase font-black">Editar</span>
                     </button>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-right space-x-2">
-                    <button onClick={() => handleEdit(product)} className="text-gray-400 hover:text-brand inline-flex p-1.5 rounded-md hover:bg-brand/10 transition-colors">
-                      <Edit size={16} />
+                    <button 
+                      onClick={() => handleDeleteAttempt(product)} 
+                      className="min-h-[38px] px-3 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl flex items-center gap-1 transition-colors active:scale-98"
+                      title="Excluir"
+                    >
+                      <Trash2 size={15} />
                     </button>
-                    <button onClick={() => handleDeleteAttempt(product)} className="text-gray-400 hover:text-red-600 inline-flex p-1.5 rounded-md hover:bg-red-50 transition-colors">
-                      <Trash2 size={16} />
-                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="p-8 text-center text-xs font-bold text-gray-400 uppercase tracking-widest">
+              Nenhum item encontrado.
+            </div>
+          )}
+        </div>
+
+        {/* DESKTOP VIEW (Table with horizontal scroll fallback) */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-100">
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr>
+                <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Item</th>
+                <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Categoria</th>
+                <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Preço</th>
+                <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Status</th>
+                <th className="px-4 py-3 text-right text-[10px] font-bold text-gray-500 uppercase tracking-widest">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-50">
+              {filteredProducts.length > 0 ? (
+                filteredProducts.map(product => (
+                  <tr key={product.id} className="hover:bg-gray-50/80 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="text-xs font-bold text-gray-900 leading-tight" translate="no">{product.name}</div>
+                      <div className="text-[10px] text-gray-500 truncate max-w-[280px] mt-0.5">{product.description}</div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                      {product.category === 'refeicao' ? 'Refeição' : 'Bebida'}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900 font-black">
+                      {formatCurrency(product.price)}
+                      {product.priceOption2 && <span className="text-[9px] text-brand font-bold uppercase tracking-widest block mt-0.5">2 pedaços: {formatCurrency(product.priceOption2)}</span>}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <button 
+                        onClick={() => handleToggleAvailable(product)}
+                        className={`px-2.5 py-1 rounded-lg text-[9px] font-bold uppercase tracking-widest transition-colors cursor-pointer active:scale-95 ${
+                          product.available ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'
+                        }`}
+                      >
+                        {product.available ? 'Disponível' : 'Indisponível'}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-right space-x-2">
+                      <button onClick={() => handleEdit(product)} className="text-gray-400 hover:text-brand inline-flex p-1.5 rounded-md hover:bg-brand/10 transition-colors">
+                        <Edit size={16} />
+                      </button>
+                      <button onClick={() => handleDeleteAttempt(product)} className="text-gray-400 hover:text-red-600 inline-flex p-1.5 rounded-md hover:bg-red-50 transition-colors">
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-xs font-bold text-gray-400 uppercase tracking-widest">
+                    Nenhum item encontrado.
                   </td>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">
-                  Nenhum item encontrado.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Delete Confirmation Modal */}
