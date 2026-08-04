@@ -110,14 +110,15 @@ export default function Layout() {
     if (promptToUse) {
       console.log('PWA: Triggering native install prompt...');
       try {
-        await promptToUse.prompt();
-        const choiceResult = await promptToUse.userChoice;
-        console.log(`PWA: User choice result: ${choiceResult.outcome}`);
-        if (choiceResult.outcome === 'accepted') {
-          setShowInstallBanner(false);
-          setDeferredPrompt(null);
-          (window as any).deferredPrompt = null;
-        }
+        promptToUse.prompt();
+        promptToUse.userChoice.then((choiceResult: any) => {
+          console.log(`PWA: User choice result: ${choiceResult.outcome}`);
+          if (choiceResult.outcome === 'accepted') {
+            setShowInstallBanner(false);
+            setDeferredPrompt(null);
+            (window as any).deferredPrompt = null;
+          }
+        });
       } catch (e) {
         console.error('PWA: Error triggering prompt:', e);
       }
@@ -125,7 +126,6 @@ export default function Layout() {
       setShowIosInstructions(true);
     } else {
       console.log('PWA: Native install prompt not ready yet or browser manages installation natively.');
-      // If we are on Android but prompt is not available, show Android manual instructions
       setShowAndroidInstructions(true);
     }
   };
@@ -226,14 +226,14 @@ export default function Layout() {
             </div>
             
             <h3 className="text-center font-black text-lg text-gray-900 mb-2 uppercase tracking-wide">Instalar no Android</h3>
-            <p className="text-center text-sm text-gray-500 font-medium mb-8">Para instalar nosso app no seu celular:</p>
+            <p className="text-center text-sm text-gray-500 font-medium mb-8">Para instalar nosso app no seu celular (Recomendamos usar o <strong>Google Chrome</strong>):</p>
             
             <div className="space-y-4">
               <div className="flex items-start gap-4">
                 <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 font-black text-gray-600 text-sm">1</div>
                 <div>
                   <p className="text-sm text-gray-800 font-bold">Menu do Navegador</p>
-                  <p className="text-xs text-gray-500 mt-1">Toque nos três pontinhos verticais (⋮) no canto superior direito do navegador.</p>
+                  <p className="text-xs text-gray-500 mt-1">Toque nos três pontinhos verticais (⋮) no canto superior direito do navegador Chrome.</p>
                 </div>
               </div>
               <div className="flex items-start gap-4">
