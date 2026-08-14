@@ -483,7 +483,7 @@ function MobileTabLink({ to, current, icon, label }: { to: string, current: stri
 // every admin page (rendered once in Layout so it can never be closed or
 // scrolled away from). Its content and urgency change with billing phase;
 // it always carries a way to copy the Pix key and submit a payment proof.
-type BillingPhase = 'launch_pending' | 'launch_paused' | 'need_due_date' | 'active_ok' | 'monthly_warning' | 'monthly_paused';
+type BillingPhase = 'launch_pending' | 'launch_paused' | 'need_due_date' | 'active_ok' | 'monthly_warning' | 'monthly_overdue_grace' | 'monthly_paused';
 
 function BillingBanner({ billing, pauseState, user }: {
   billing: BillingInfo;
@@ -516,6 +516,7 @@ function BillingBanner({ billing, pauseState, user }: {
     }
     if (!billing.nextDueDate) return 'need_due_date';
     if (pauseState.paused) return 'monthly_paused';
+    if (Date.now() > billing.nextDueDate) return 'monthly_overdue_grace';
     const daysLeft = Math.ceil((billing.nextDueDate - Date.now()) / (24 * 60 * 60 * 1000));
     return daysLeft <= 5 ? 'monthly_warning' : 'active_ok';
   })();
@@ -580,7 +581,7 @@ function BillingBanner({ billing, pauseState, user }: {
     );
   }
 
-  const isMonthly = phase === 'monthly_warning' || phase === 'monthly_paused';
+  const isMonthly = phase === 'monthly_warning' || phase === 'monthly_overdue_grace' || phase === 'monthly_paused';
   const amount = isMonthly ? billing.monthlyFeeAmount : billing.launchFeeAmount;
   const label = isMonthly ? 'Mensalidade' : 'Taxa de Lançamento';
   const proofType: BillingProofType = phase === 'need_due_date' ? 'set_due_date' : isMonthly ? 'monthly' : 'launch_fee';
@@ -595,7 +596,7 @@ function BillingBanner({ billing, pauseState, user }: {
   // only the tone changes: red = actually paused (never closable), amber
   // = action needed but still on time (closable this session, comes back
   // on reload), green = good news / one-time setup step.
-  const tone: 'red' | 'amber' | 'green' = phase === 'launch_paused' || phase === 'monthly_paused'
+  const tone: 'red' | 'amber' | 'green' = phase === 'launch_paused' || phase === 'monthly_paused' || phase === 'monthly_overdue_grace'
     ? 'red'
     : phase === 'need_due_date'
     ? 'green'
@@ -618,6 +619,8 @@ function BillingBanner({ billing, pauseState, user }: {
   // onward the same panel reappears for the recurring fee instead.
   const explanation = phase === 'need_due_date'
     ? 'A Taxa de Lançamento já foi confirmada! Agora só falta escolher o dia do mês em que a mensalidade vai vencer a partir de setembro.'
+    : phase === 'monthly_overdue_grace'
+    ? `A mensalidade de ${formatCurrency(billing.monthlyFeeAmount)} venceu e ainda não foi confirmada. Você está no prazo extra de 48h antes do app pausar automaticamente.`
     : isMonthly
     ? `Isso está aparecendo porque a mensalidade de ${formatCurrency(billing.monthlyFeeAmount)} referente ao uso do app ainda não foi confirmada.`
     : `Isso está aparecendo porque a Taxa de Lançamento (pagamento único de ${formatCurrency(billing.launchFeeAmount)} para ativação do app) ainda não foi confirmada. A partir do mês que vem, este aviso passa a ser sobre a mensalidade de ${formatCurrency(billing.monthlyFeeAmount)}.`;
@@ -663,6 +666,8 @@ function BillingBanner({ billing, pauseState, user }: {
                 <p className={`text-sm font-black uppercase tracking-wide leading-tight ${toneClasses.title}`}>
                   {phase === 'need_due_date'
                     ? 'Pagamento Confirmado! Falta Escolher o Vencimento'
+                    : phase === 'monthly_overdue_grace'
+                    ? 'Mensalidade Vencida — App Pausa em Breve'
                     : tone === 'red'
                     ? `App Pausado — ${label} Não Confirmada`
                     : `${label} Pendente — ${formatCurrency(amount)}`}
@@ -670,14 +675,16 @@ function BillingBanner({ billing, pauseState, user }: {
                 <p className={`text-[11px] font-semibold mt-1 leading-relaxed ${toneClasses.body}`}>
                   {explanation}
                 </p>
-                {tone === 'amber' && phase !== 'need_due_date' && pauseState.deadline && (
-                  <p className="text-[11px] font-black mt-1 text-amber-950 flex items-center gap-1">
+                {phase !== 'need_due_date' && !pauseState.paused && pauseState.deadline && (
+                  <p className={`text-[11px] font-black mt-1 flex items-center gap-1 ${tone === 'red' ? 'text-white' : 'text-amber-950'}`}>
                     <Clock size={11} /> Prazo: {formatCountdown(pauseState.deadline)} — depois disso o app pausa automaticamente.
                   </p>
                 )}
                 {tone === 'red' && (
                   <p className="text-[11px] font-bold mt-1 text-white/90">
-                    Envie o comprovante abaixo. Só Michel ou Rafael podem confirmar o pagamento e liberar o app de novo.
+                    {pauseState.paused
+                      ? 'Envie o comprovante abaixo. Só Michel ou Rafael podem confirmar o pagamento e liberar o app de novo.'
+                      : 'Envie o comprovante abaixo o quanto antes para evitar que o app pause.'}
                   </p>
                 )}
               </div>

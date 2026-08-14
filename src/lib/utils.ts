@@ -130,6 +130,12 @@ export function getBillingPauseState(billing: BillingInfo | null | undefined): B
     if (now > graceDeadline) {
       return { paused: true, reason: 'monthly_overdue', deadline: graceDeadline };
     }
+    // Past the due date but still inside the 48h grace window — not
+    // paused yet, but the deadline that matters now is the pause
+    // deadline, not the due date itself (which has already passed).
+    if (now > billing.nextDueDate) {
+      return { paused: false, reason: null, deadline: graceDeadline };
+    }
     return { paused: false, reason: null, deadline: billing.nextDueDate };
   }
 
