@@ -5,6 +5,7 @@ import { useCart } from '../context/CartContext';
 import { onSnapshot, doc, setDoc, addDoc, collection } from 'firebase/firestore';
 import { db, sanitizeForFirestore } from '../lib/firebase';
 import { format } from 'date-fns';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   UtensilsCrossed,
   ShoppingCart,
@@ -22,7 +23,10 @@ import {
   Smartphone,
   Laptop,
   AlertTriangle,
-  Copy
+  Copy,
+  Upload,
+  Clock,
+  Image as ImageIcon
 } from 'lucide-react';
 import { cn, getBillingPauseState, formatCountdown, compressImageToBase64, formatCurrency } from '../lib/utils';
 import { BillingInfo, BillingProofType } from '../types';
@@ -487,6 +491,7 @@ function BillingBanner({ billing, pauseState, user }: {
   const [copied, setCopied] = useState(false);
   const [note, setNote] = useState('');
   const [proposedDate, setProposedDate] = useState('');
+  const [fileName, setFileName] = useState('');
   const [uploading, setUploading] = useState(false);
   const [sent, setSent] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -529,6 +534,7 @@ function BillingBanner({ billing, pauseState, user }: {
       setSent(true);
       setNote('');
       setProposedDate('');
+      setFileName('');
       if (fileInputRef.current) fileInputRef.current.value = '';
       setTimeout(() => setSent(false), 5000);
     } catch (err) {
@@ -538,6 +544,8 @@ function BillingBanner({ billing, pauseState, user }: {
     }
   };
 
+  // Calm, informational strip once everything's up to date — no need to
+  // grab attention here, just keep the next due date visible.
   if (phase === 'active_ok') {
     const daysLeft = Math.ceil((billing.nextDueDate! - Date.now()) / (24 * 60 * 60 * 1000));
     return (
@@ -553,83 +561,142 @@ function BillingBanner({ billing, pauseState, user }: {
   const label = isMonthly ? 'Mensalidade' : 'Taxa de Lançamento';
   const proofType: BillingProofType = phase === 'need_due_date' ? 'set_due_date' : isMonthly ? 'monthly' : 'launch_fee';
 
+  // Explains, in plain language, exactly why this is showing up — the
+  // launch fee is a one-time first payment; from the next monthly cycle
+  // onward the same panel reappears for the recurring fee instead.
+  const explanation = phase === 'need_due_date'
+    ? 'A Taxa de Lançamento já foi confirmada! Agora só falta escolher o dia do mês em que a mensalidade vai vencer a partir de setembro.'
+    : isMonthly
+    ? `Isso está aparecendo porque a mensalidade de ${formatCurrency(billing.monthlyFeeAmount)} referente ao uso do app ainda não foi confirmada.`
+    : `Isso está aparecendo porque a Taxa de Lançamento (pagamento único de ${formatCurrency(billing.launchFeeAmount)} para ativação do app) ainda não foi confirmada. A partir do mês que vem, este aviso passa a ser sobre a mensalidade de ${formatCurrency(billing.monthlyFeeAmount)}.`;
+
   return (
-    <div className={`sticky top-0 z-[70] px-4 py-3 border-b ${urgent ? 'bg-red-600 text-white border-red-700' : 'bg-amber-50 text-amber-900 border-amber-200'}`}>
-      <div className="max-w-4xl mx-auto space-y-2">
-        <div className="flex items-start gap-2">
-          <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            {phase === 'need_due_date' ? (
-              <p className="text-xs font-black uppercase tracking-wide">
-                Escolha a data de vencimento da 1ª mensalidade ({formatCurrency(billing.monthlyFeeAmount)}, a partir de setembro)
-              </p>
-            ) : (
-              <>
-                <p className="text-xs font-black uppercase tracking-wide">
-                  {urgent
-                    ? `App pausado — ${label} (${formatCurrency(amount)}) não confirmada`
-                    : `${label} pendente — ${formatCurrency(amount)}`}
-                </p>
-                <p className={`text-[11px] font-semibold mt-0.5 ${urgent ? 'text-white/90' : 'text-amber-700'}`}>
-                  {urgent
-                    ? 'Envie o comprovante abaixo. Apenas Michel ou Rafael podem confirmar o pagamento e liberar o app.'
-                    : pauseState.deadline
-                    ? `Prazo: ${formatCountdown(pauseState.deadline)} — após o prazo, o app pausa automaticamente.`
-                    : ''}
-                </p>
-              </>
-            )}
-          </div>
-        </div>
-
-        {phase !== 'need_due_date' && (
-          <div className={`flex flex-wrap items-center gap-2 text-[11px] font-bold rounded-lg px-3 py-2 ${urgent ? 'bg-white/10' : 'bg-white border border-amber-200'}`}>
-            <span>PIX: {billing.pixKey}</span>
-            <button
-              type="button"
-              onClick={copyPix}
-              className={`px-2 py-1 rounded font-black uppercase tracking-wider flex items-center gap-1 ${urgent ? 'bg-white text-red-700' : 'bg-amber-600 text-white'}`}
-            >
-              <Copy size={11} /> {copied ? 'Copiado!' : 'Copiar'}
-            </button>
-            <span className="opacity-80">{billing.pixBeneficiary} — {billing.pixBank}</span>
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-2">
-          {phase === 'need_due_date' ? (
-            <input
-              type="date"
-              value={proposedDate}
-              onChange={e => setProposedDate(e.target.value)}
-              className="text-[11px] font-bold rounded-lg px-2 py-1.5 text-gray-800"
-            />
-          ) : (
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className={`text-[10px] font-bold max-w-[200px] ${urgent ? 'text-white' : 'text-amber-800'}`}
+    <AnimatePresence>
+      <motion.div
+        initial={{ y: -80, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+        className="sticky top-0 z-[70]"
+      >
+        <div className={`relative overflow-hidden border-b-4 ${urgent ? 'bg-gradient-to-r from-red-700 via-red-600 to-red-700 border-red-900' : 'bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 border-amber-700'}`}>
+          {urgent && (
+            <motion.div
+              className="absolute inset-0 bg-white/10"
+              animate={{ opacity: [0, 0.25, 0] }}
+              transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
             />
           )}
-          <input
-            type="text"
-            placeholder="Observação (opcional)"
-            value={note}
-            onChange={e => setNote(e.target.value)}
-            className="text-[11px] font-bold rounded-lg px-2 py-1.5 text-gray-800 flex-1 min-w-[140px]"
-          />
-          <button
-            type="button"
-            disabled={uploading || (phase === 'need_due_date' && !proposedDate)}
-            onClick={() => handleSendProof(proofType)}
-            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider disabled:opacity-50 shrink-0 ${urgent ? 'bg-white text-red-700' : 'bg-amber-600 text-white'}`}
-          >
-            {uploading ? 'Enviando...' : phase === 'need_due_date' ? 'Enviar Data' : 'Enviar Comprovante'}
-          </button>
+          <div className="relative max-w-3xl mx-auto px-4 py-4">
+            <div className="flex items-start gap-3">
+              {/* Attention-grabbing icon with a pinging ring behind it */}
+              <div className="relative shrink-0 mt-0.5">
+                <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping ${urgent ? 'bg-white' : 'bg-white'}`}></span>
+                <span className={`relative inline-flex items-center justify-center w-8 h-8 rounded-full ${urgent ? 'bg-white text-red-700' : 'bg-white text-amber-600'}`}>
+                  {phase === 'need_due_date' ? <Clock size={16} /> : <AlertTriangle size={16} />}
+                </span>
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-black uppercase tracking-wide leading-tight ${urgent ? 'text-white' : 'text-amber-950'}`}>
+                  {phase === 'need_due_date'
+                    ? 'Falta escolher o vencimento da mensalidade'
+                    : urgent
+                    ? `App Pausado — ${label} Não Confirmada`
+                    : `${label} Pendente — ${formatCurrency(amount)}`}
+                </p>
+                <p className={`text-[11px] font-semibold mt-1 leading-relaxed ${urgent ? 'text-white/90' : 'text-amber-900/90'}`}>
+                  {explanation}
+                </p>
+                {!urgent && phase !== 'need_due_date' && pauseState.deadline && (
+                  <p className="text-[11px] font-black mt-1 text-amber-950 flex items-center gap-1">
+                    <Clock size={11} /> Prazo: {formatCountdown(pauseState.deadline)} — depois disso o app pausa automaticamente.
+                  </p>
+                )}
+                {urgent && (
+                  <p className="text-[11px] font-bold mt-1 text-white/90">
+                    Envie o comprovante abaixo. Só Michel ou Rafael podem confirmar o pagamento e liberar o app de novo.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Payment info card */}
+            {phase !== 'need_due_date' && (
+              <div className="mt-3 bg-white rounded-xl p-3 shadow-sm">
+                <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Dados para pagamento (Pix)</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono font-black text-sm text-gray-900 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">{billing.pixKey}</span>
+                  <button
+                    type="button"
+                    onClick={copyPix}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-colors ${copied ? 'bg-green-600 text-white' : 'bg-gray-900 text-white hover:bg-gray-700'}`}
+                  >
+                    <Copy size={12} /> {copied ? 'Copiado!' : 'Copiar Chave'}
+                  </button>
+                  <span className="text-[11px] text-gray-500 font-semibold">{billing.pixBeneficiary} · {billing.pixBank}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Upload / due-date proposal card */}
+            <div className="mt-2 bg-white rounded-xl p-3 shadow-sm space-y-2">
+              <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">
+                {phase === 'need_due_date' ? 'Escolha a data de vencimento' : 'Enviar comprovante de pagamento'}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {phase === 'need_due_date' ? (
+                  <input
+                    type="date"
+                    value={proposedDate}
+                    onChange={e => setProposedDate(e.target.value)}
+                    className="text-xs font-bold rounded-lg px-3 py-2 text-gray-800 border border-gray-200 bg-gray-50"
+                  />
+                ) : (
+                  <>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={e => setFileName(e.target.files?.[0]?.name || '')}
+                      className="hidden"
+                      id="billing-proof-file"
+                    />
+                    <label
+                      htmlFor="billing-proof-file"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider bg-gray-100 text-gray-700 hover:bg-gray-200 cursor-pointer transition-colors shrink-0"
+                    >
+                      <Upload size={13} /> Selecionar Comprovante
+                    </label>
+                    {fileName && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 max-w-[140px] truncate">
+                        <ImageIcon size={11} className="shrink-0" /> <span className="truncate">{fileName}</span>
+                      </span>
+                    )}
+                  </>
+                )}
+                <input
+                  type="text"
+                  placeholder="Observação (opcional)"
+                  value={note}
+                  onChange={e => setNote(e.target.value)}
+                  className="text-xs font-medium rounded-lg px-3 py-2 text-gray-800 border border-gray-200 bg-gray-50 flex-1 min-w-[140px]"
+                />
+              </div>
+              <button
+                type="button"
+                disabled={uploading || (phase === 'need_due_date' && !proposedDate)}
+                onClick={() => handleSendProof(proofType)}
+                className={`w-full sm:w-auto px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wider disabled:opacity-50 transition-colors ${urgent ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-amber-600 text-white hover:bg-amber-700'}`}
+              >
+                {uploading ? 'Enviando...' : phase === 'need_due_date' ? 'Enviar Data Escolhida' : 'Enviar Comprovante'}
+              </button>
+              {sent && (
+                <p className="text-[11px] font-bold text-green-700">Enviado! Aguardando confirmação de Michel ou Rafael.</p>
+              )}
+            </div>
+          </div>
         </div>
-        {sent && <p className="text-[10px] font-bold">Enviado! Aguardando confirmação de Michel ou Rafael.</p>}
-      </div>
-    </div>
+      </motion.div>
+    </AnimatePresence>
   );
 }
