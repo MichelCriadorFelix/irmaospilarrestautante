@@ -495,6 +495,10 @@ function BillingBanner({ billing, pauseState, user }: {
   const [fileName, setFileName] = useState('');
   const [uploading, setUploading] = useState(false);
   const [sent, setSent] = useState(false);
+  // Not persisted anywhere (no localStorage/sessionStorage) on purpose —
+  // dismissing a still-on-time reminder is fine for the current visit,
+  // but it must come back on the next reload/app open, not stay hidden.
+  const [dismissed, setDismissed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const DUE_DAY_OPTIONS = [1, 5, 10, 15, 20];
@@ -575,11 +579,30 @@ function BillingBanner({ billing, pauseState, user }: {
     );
   }
 
-  const urgent = phase === 'launch_paused' || phase === 'monthly_paused';
   const isMonthly = phase === 'monthly_warning' || phase === 'monthly_paused';
   const amount = isMonthly ? billing.monthlyFeeAmount : billing.launchFeeAmount;
   const label = isMonthly ? 'Mensalidade' : 'Taxa de Lançamento';
   const proofType: BillingProofType = phase === 'need_due_date' ? 'set_due_date' : isMonthly ? 'monthly' : 'launch_fee';
+
+  // Every phase gets the same rich, standardized layout (icon + ring,
+  // headline, plain-language explanation, how-to card, action card) —
+  // only the tone changes: red = actually paused (never closable), amber
+  // = action needed but still on time (closable this session, comes back
+  // on reload), green = good news / one-time setup step.
+  const tone: 'red' | 'amber' | 'green' = phase === 'launch_paused' || phase === 'monthly_paused'
+    ? 'red'
+    : phase === 'need_due_date'
+    ? 'green'
+    : 'amber';
+  const closable = phase === 'launch_pending' || phase === 'monthly_warning';
+
+  if (closable && dismissed) return null;
+
+  const toneClasses = {
+    red: { bg: 'bg-gradient-to-r from-red-700 via-red-600 to-red-700', border: 'border-red-900', icon: 'text-red-700', title: 'text-white', body: 'text-white/90', card: 'bg-white/10' },
+    amber: { bg: 'bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500', border: 'border-amber-700', icon: 'text-amber-600', title: 'text-amber-950', body: 'text-amber-900/90', card: 'bg-white/60 border border-amber-600/20' },
+    green: { bg: 'bg-gradient-to-r from-emerald-600 via-emerald-500 to-emerald-600', border: 'border-emerald-800', icon: 'text-emerald-600', title: 'text-white', body: 'text-white/90', card: 'bg-white/10' },
+  }[tone];
 
   // Explains, in plain language, exactly why this is showing up — the
   // launch fee is a one-time first payment; from the next monthly cycle
@@ -595,44 +618,55 @@ function BillingBanner({ billing, pauseState, user }: {
       <motion.div
         initial={{ y: -80, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
+        exit={{ y: -80, opacity: 0 }}
         transition={{ type: 'spring', stiffness: 300, damping: 28 }}
         className="sticky top-0 z-[70]"
       >
-        <div className={`relative overflow-hidden border-b-4 ${urgent ? 'bg-gradient-to-r from-red-700 via-red-600 to-red-700 border-red-900' : 'bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 border-amber-700'}`}>
-          {urgent && (
+        <div className={`relative overflow-hidden border-b-4 ${toneClasses.bg} ${toneClasses.border}`}>
+          {tone === 'red' && (
             <motion.div
               className="absolute inset-0 bg-white/10"
               animate={{ opacity: [0, 0.25, 0] }}
               transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
             />
           )}
+          {closable && (
+            <button
+              type="button"
+              onClick={() => setDismissed(true)}
+              title="Fechar por agora (volta ao recarregar a página)"
+              className="absolute top-3 right-3 text-amber-950/60 hover:text-amber-950 p-1 rounded-full hover:bg-black/5 transition-colors z-10"
+            >
+              <X size={16} />
+            </button>
+          )}
           <div className="relative max-w-3xl mx-auto px-4 py-4">
-            <div className="flex items-start gap-3">
+            <div className="flex items-start gap-3 pr-6">
               {/* Attention-grabbing icon with a pinging ring behind it */}
               <div className="relative shrink-0 mt-0.5">
-                <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping ${urgent ? 'bg-white' : 'bg-white'}`}></span>
-                <span className={`relative inline-flex items-center justify-center w-8 h-8 rounded-full ${urgent ? 'bg-white text-red-700' : 'bg-white text-amber-600'}`}>
-                  {phase === 'need_due_date' ? <Clock size={16} /> : <AlertTriangle size={16} />}
+                <span className="absolute inline-flex h-full w-full rounded-full bg-white opacity-75 animate-ping"></span>
+                <span className={`relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-white ${toneClasses.icon}`}>
+                  {phase === 'need_due_date' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
                 </span>
               </div>
 
               <div className="flex-1 min-w-0">
-                <p className={`text-sm font-black uppercase tracking-wide leading-tight ${urgent ? 'text-white' : 'text-amber-950'}`}>
+                <p className={`text-sm font-black uppercase tracking-wide leading-tight ${toneClasses.title}`}>
                   {phase === 'need_due_date'
-                    ? 'Falta escolher o vencimento da mensalidade'
-                    : urgent
+                    ? 'Pagamento Confirmado! Falta Escolher o Vencimento'
+                    : tone === 'red'
                     ? `App Pausado — ${label} Não Confirmada`
                     : `${label} Pendente — ${formatCurrency(amount)}`}
                 </p>
-                <p className={`text-[11px] font-semibold mt-1 leading-relaxed ${urgent ? 'text-white/90' : 'text-amber-900/90'}`}>
+                <p className={`text-[11px] font-semibold mt-1 leading-relaxed ${toneClasses.body}`}>
                   {explanation}
                 </p>
-                {!urgent && phase !== 'need_due_date' && pauseState.deadline && (
+                {tone === 'amber' && phase !== 'need_due_date' && pauseState.deadline && (
                   <p className="text-[11px] font-black mt-1 text-amber-950 flex items-center gap-1">
                     <Clock size={11} /> Prazo: {formatCountdown(pauseState.deadline)} — depois disso o app pausa automaticamente.
                   </p>
                 )}
-                {urgent && (
+                {tone === 'red' && (
                   <p className="text-[11px] font-bold mt-1 text-white/90">
                     Envie o comprovante abaixo. Só Michel ou Rafael podem confirmar o pagamento e liberar o app de novo.
                   </p>
@@ -642,9 +676,9 @@ function BillingBanner({ billing, pauseState, user }: {
 
             {/* Plain-language how-to, always visible while a payment is pending */}
             {phase !== 'need_due_date' && (
-              <div className={`mt-3 rounded-xl p-3 flex items-start gap-2 ${urgent ? 'bg-white/10' : 'bg-white/60 border border-amber-600/20'}`}>
-                <CheckCircle2 size={15} className={`shrink-0 mt-0.5 ${urgent ? 'text-white' : 'text-amber-700'}`} />
-                <p className={`text-[11px] font-bold leading-relaxed ${urgent ? 'text-white' : 'text-amber-900'}`}>
+              <div className={`mt-3 rounded-xl p-3 flex items-start gap-2 ${toneClasses.card}`}>
+                <CheckCircle2 size={15} className={`shrink-0 mt-0.5 ${tone === 'amber' ? 'text-amber-700' : 'text-white'}`} />
+                <p className={`text-[11px] font-bold leading-relaxed ${tone === 'amber' ? 'text-amber-900' : 'text-white'}`}>
                   Como funciona: 1) faça o pagamento pelo Pix acima. 2) Anexe o comprovante aqui embaixo (é obrigatório). 3) Pronto — o envio do comprovante pelo app é o jeito mais rápido de validar seu pagamento, muito mais rápido do que esperar sem enviar nada.
                 </p>
               </div>
@@ -729,7 +763,7 @@ function BillingBanner({ billing, pauseState, user }: {
                 type="button"
                 disabled={uploading || !canSubmit}
                 onClick={() => handleSendProof(proofType)}
-                className={`w-full sm:w-auto px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wider disabled:opacity-50 transition-colors ${urgent ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-amber-600 text-white hover:bg-amber-700'}`}
+                className={`w-full sm:w-auto px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wider disabled:opacity-50 transition-colors ${tone === 'red' ? 'bg-red-600 text-white hover:bg-red-700' : tone === 'green' ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-amber-600 text-white hover:bg-amber-700'}`}
               >
                 {uploading ? 'Enviando...' : phase === 'need_due_date' ? 'Enviar Dia Escolhido' : 'Enviar Comprovante'}
               </button>
