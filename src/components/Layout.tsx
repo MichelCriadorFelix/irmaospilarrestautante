@@ -27,7 +27,8 @@ import {
   Upload,
   Clock,
   Image as ImageIcon,
-  CheckCircle2
+  CheckCircle2,
+  MessageCircle
 } from 'lucide-react';
 import { cn, getBillingPauseState, formatCountdown, compressImageToBase64, formatCurrency } from '../lib/utils';
 import { BillingInfo, BillingProofType } from '../types';
@@ -584,6 +585,11 @@ function BillingBanner({ billing, pauseState, user }: {
   const label = isMonthly ? 'Mensalidade' : 'Taxa de Lançamento';
   const proofType: BillingProofType = phase === 'need_due_date' ? 'set_due_date' : isMonthly ? 'monthly' : 'launch_fee';
 
+  const whatsappLink = (() => {
+    const message = `Olá Rafael! Aqui é ${user.name}, responsável pelo Irmãos Pilar. Gostaria de informar que efetuei o pagamento d${isMonthly ? 'a mensalidade' : 'a Taxa de Lançamento'} (${formatCurrency(amount)}) e já enviei o comprovante pelo aplicativo. Poderia verificar e confirmar o recebimento, por favor? Agradeço desde já!`;
+    return `https://wa.me/5521988358743?text=${encodeURIComponent(message)}`;
+  })();
+
   // Every phase gets the same rich, standardized layout (icon + ring,
   // headline, plain-language explanation, how-to card, action card) —
   // only the tone changes: red = actually paused (never closable), amber
@@ -759,16 +765,30 @@ function BillingBanner({ billing, pauseState, user }: {
               {!canSubmit && phase !== 'need_due_date' && (
                 <p className="text-[10px] font-bold text-red-600">* É obrigatório anexar o comprovante para enviar.</p>
               )}
-              <button
-                type="button"
-                disabled={uploading || !canSubmit}
-                onClick={() => handleSendProof(proofType)}
-                className={`w-full sm:w-auto px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wider disabled:opacity-50 transition-colors ${tone === 'red' ? 'bg-red-600 text-white hover:bg-red-700' : tone === 'green' ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-amber-600 text-white hover:bg-amber-700'}`}
-              >
-                {uploading ? 'Enviando...' : phase === 'need_due_date' ? 'Enviar Dia Escolhido' : 'Enviar Comprovante'}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={uploading || !canSubmit}
+                  onClick={() => handleSendProof(proofType)}
+                  className={`px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wider disabled:opacity-50 transition-colors ${tone === 'red' ? 'bg-red-600 text-white hover:bg-red-700' : tone === 'green' ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-amber-600 text-white hover:bg-amber-700'}`}
+                >
+                  {uploading ? 'Enviando...' : phase === 'need_due_date' ? 'Enviar Dia Escolhido' : 'Confirmar Pagamento Efetuado'}
+                </button>
+                {phase !== 'need_due_date' && (
+                  <a
+                    href={whatsappLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wider bg-[#25D366] text-white hover:brightness-95 transition-all"
+                  >
+                    <MessageCircle size={14} /> Avisar Rafael no WhatsApp
+                  </a>
+                )}
+              </div>
               {sent && (
-                <p className="text-[11px] font-bold text-green-700">Enviado! Aguardando confirmação de Michel ou Rafael.</p>
+                <p className="text-[11px] font-bold text-green-700">
+                  Recebemos a sua confirmação de pagamento! Em breve analisaremos o comprovante enviado e liberaremos o acesso — obrigado pela confiança.
+                </p>
               )}
             </div>
           </div>
