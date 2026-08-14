@@ -37,7 +37,8 @@ import {
   Image as ImageIcon,
   Upload,
   Trash2,
-  X
+  X,
+  AlertTriangle
 } from 'lucide-react';
 import { playNotificationSound } from '../lib/audio';
 import { DEFAULT_OPENING_HOURS, DAY_NAMES, DAYS_ORDER } from '../lib/openingHours';
@@ -1076,7 +1077,20 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-xs font-medium text-gray-700">
-                  {users.sort((a, b) => b.role === 'admin' ? 1 : -1).map(u => (
+                  {users.sort((a, b) => b.role === 'admin' ? 1 : -1).map(u => {
+                    // Same "implausible distance" signal used in the Ver
+                    // Dados diagnostic — surfaced here too so the admin can
+                    // spot a customer with a broken address/location
+                    // without opening each one individually. A customer
+                    // with a registered address but no location at all
+                    // (geocoding failed even at the city level) is flagged
+                    // the same way, since that also blocks their checkout.
+                    const distKm = (u.lat && u.lng)
+                      ? calculateDistance(RESTAURANT_LAT, RESTAURANT_LNG, u.lat, u.lng) / 1000
+                      : null;
+                    const hasLocationIssue = (distKm !== null && distKm > 200)
+                      || (!!u.addressStreet && !!u.addressCity && !u.lat);
+                    return (
                     <tr key={u.id} className="hover:bg-gray-50/60 transition-colors">
                       <td className="p-4">
                         <div className="flex items-center gap-3">
@@ -1084,7 +1098,14 @@ export default function AdminDashboard() {
                             {u.name?.charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <span className="font-bold text-gray-900 block">{u.name}</span>
+                            <span className="font-bold text-gray-900 flex items-center gap-1.5">
+                              {u.name}
+                              {hasLocationIssue && (
+                                <span title="Endereço/localização com problema — clique em Ver Dados para analisar" className="inline-flex items-center gap-0.5 bg-red-50 text-red-600 border border-red-200 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider">
+                                  <AlertTriangle size={9} /> Endereço
+                                </span>
+                              )}
+                            </span>
                             <span className="text-[10px] text-gray-400 font-semibold">{u.email}</span>
                           </div>
                         </div>
@@ -1132,12 +1153,13 @@ export default function AdminDashboard() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
-          
+
           <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl flex gap-3 items-start">
             <ShieldAlert size={20} className="text-amber-600 flex-shrink-0 mt-0.5" />
             <div>
