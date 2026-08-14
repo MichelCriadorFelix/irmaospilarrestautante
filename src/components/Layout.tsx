@@ -600,7 +600,10 @@ function BillingBanner({ billing, pauseState, user }: {
     : phase === 'need_due_date'
     ? 'green'
     : 'amber';
-  const closable = phase === 'launch_pending' || phase === 'monthly_warning';
+  // Only the recurring "mensalidade chegando" reminder is closable — the
+  // launch fee (even before its 48h grace runs out) is the one-time
+  // activation payment and must stay in front of the owner the whole time.
+  const closable = phase === 'monthly_warning';
 
   if (closable && dismissed) return null;
 
