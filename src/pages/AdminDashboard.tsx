@@ -3,7 +3,7 @@ import { collection, query, orderBy, onSnapshot, where, doc, setDoc, limit } fro
 
 import { db, storage, sanitizeForFirestore, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Order, FinanceEntry, CompanyInfo } from '../types';
-import { formatCurrency } from '../lib/utils';
+import { formatCurrency, calculateDistance, geocodeBrazilianAddress } from '../lib/utils';
 import { format, subDays } from 'date-fns';
 import { Link, useSearchParams } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -36,7 +36,8 @@ import {
   Check,
   Image as ImageIcon,
   Upload,
-  Trash2
+  Trash2,
+  X
 } from 'lucide-react';
 import { playNotificationSound } from '../lib/audio';
 import { DEFAULT_OPENING_HOURS, DAY_NAMES, DAYS_ORDER } from '../lib/openingHours';
@@ -74,6 +75,57 @@ export default function AdminDashboard() {
   const [finances, setFinances] = useState<FinanceEntry[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [stats, setStats] = useState({ pending: 0, preparing: 0, todayTotal: 0 });
+  const [viewingUser, setViewingUser] = useState<any | null>(null);
+  const [fixingLocation, setFixingLocation] = useState(false);
+  const [fixLocationMessage, setFixLocationMessage] = useState<string | null>(null);
+
+  // Matches the coordinates hardcoded in Cart.tsx's checkout radius check —
+  // the store's own address here is a single free-text field with no
+  // lat/lng, so this is the only reference point available for the
+  // "distância até o estabelecimento" diagnostic below.
+  const RESTAURANT_LAT = -22.8654801;
+  const RESTAURANT_LNG = -43.3012176;
+
+  const handleFixUserLocation = async (u: any) => {
+    if (!u.addressStreet || !u.addressCity || !u.addressZip) {
+      setFixLocationMessage('Esse cliente não tem rua/cidade/CEP completos no cadastro — peça pra ele preencher em "Meus Dados" primeiro.');
+      return;
+    }
+    setFixingLocation(true);
+    setFixLocationMessage(null);
+    try {
+      const geo = await geocodeBrazilianAddress({
+        street: u.addressStreet,
+        number: u.addressNumber,
+        neighborhood: u.addressNeighborhood,
+        city: u.addressCity,
+        state: u.addressState,
+        zip: u.addressZip,
+      });
+      if (!geo) {
+        setFixLocationMessage('Não consegui localizar esse endereço no mapa, nem pela cidade. Confira se rua, bairro e cidade estão certos no cadastro dele.');
+        return;
+      }
+      const newLat = geo.lat;
+      const newLng = geo.lng;
+
+      const newDistanceKm = calculateDistance(RESTAURANT_LAT, RESTAURANT_LNG, newLat, newLng) / 1000;
+      if (newDistanceKm > 200) {
+        setFixLocationMessage(`A nova busca ainda deu uma localização muito distante (${newDistanceKm.toFixed(1)}km) — o endereço cadastrado pode ter algum erro de digitação. Confira com o cliente.`);
+        return;
+      }
+
+      await setDoc(doc(db, 'users', u.id), { lat: newLat, lng: newLng }, { merge: true });
+      setViewingUser({ ...u, lat: newLat, lng: newLng });
+      setUsers(prev => prev.map(usr => usr.id === u.id ? { ...usr, lat: newLat, lng: newLng } : usr));
+      setFixLocationMessage('Localização corrigida e salva com sucesso!');
+    } catch (err) {
+      console.error('Failed to fix user location', err);
+      setFixLocationMessage('Erro ao buscar a nova localização. Tenta de novo em alguns segundos.');
+    } finally {
+      setFixingLocation(false);
+    }
+  };
   
   // Settings Form State
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo>({
@@ -1050,26 +1102,34 @@ export default function AdminDashboard() {
                         {u.createdAt ? format(new Date(u.createdAt), 'dd/MM/yyyy') : 'N/A'}
                       </td>
                       <td className="p-4 text-center">
-                        <button
-                          onClick={async () => {
-                            const newRole = u.role === 'admin' ? 'user' : 'admin';
-                            if (window.confirm(`Deseja alterar o cargo de ${u.name} para ${newRole}?`)) {
-                              try {
-                                await setDoc(doc(db, 'users', u.id), { role: newRole }, { merge: true });
-                              } catch (err) {
-                                handleFirestoreError(err, OperationType.UPDATE, `users/${u.id}`);
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => { setViewingUser(u); setFixLocationMessage(null); }}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-wider transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200"
+                          >
+                            <Eye size={12} /> Ver Dados
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const newRole = u.role === 'admin' ? 'user' : 'admin';
+                              if (window.confirm(`Deseja alterar o cargo de ${u.name} para ${newRole}?`)) {
+                                try {
+                                  await setDoc(doc(db, 'users', u.id), { role: newRole }, { merge: true });
+                                } catch (err) {
+                                  handleFirestoreError(err, OperationType.UPDATE, `users/${u.id}`);
+                                }
                               }
-                            }
-                          }}
-                          className={`inline-flex items-center gap-1 px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-wider transition-colors ${
-                            u.role === 'admin'
-                              ? 'bg-red-50 text-red-600 hover:bg-red-100'
-                              : 'bg-brand text-white hover:bg-brand-dark'
-                          }`}
-                        >
-                          {u.role === 'admin' ? <TrendingDown size={12} /> : <TrendingUp size={12} />}
-                          {u.role === 'admin' ? 'Remover Admin' : 'Tornar Admin'}
-                        </button>
+                            }}
+                            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-wider transition-colors ${
+                              u.role === 'admin'
+                                ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                                : 'bg-brand text-white hover:bg-brand-dark'
+                            }`}
+                          >
+                            {u.role === 'admin' ? <TrendingDown size={12} /> : <TrendingUp size={12} />}
+                            {u.role === 'admin' ? 'Remover Admin' : 'Tornar Admin'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1090,6 +1150,102 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* Ver Dados modal: full customer registration data + location diagnostics */}
+      {viewingUser && (() => {
+        const u = viewingUser;
+        const addressLines = [
+          [u.addressStreet, u.addressNumber ? `Nº ${u.addressNumber}` : ''].filter(Boolean).join(', '),
+          u.addressComplement,
+          u.addressNeighborhood,
+          [u.addressCity, u.addressState].filter(Boolean).join('/'),
+          u.addressZip ? `CEP: ${u.addressZip}` : '',
+          u.addressReference ? `Ref: ${u.addressReference}` : ''
+        ].filter(Boolean);
+
+        const distanceFromStoreKm = (u.lat && u.lng)
+          ? calculateDistance(RESTAURANT_LAT, RESTAURANT_LNG, u.lat, u.lng) / 1000
+          : null;
+        const geocodeLooksWrong = distanceFromStoreKm !== null && distanceFromStoreKm > 200;
+
+        return (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => { setViewingUser(null); setFixLocationMessage(null); }}>
+            <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <div className="p-5 border-b border-gray-100 flex items-start justify-between">
+                <div>
+                  <h3 className="font-black text-gray-900 uppercase tracking-tight">{u.name}</h3>
+                  <p className="text-xs text-gray-400 font-semibold">{u.email}</p>
+                </div>
+                <button onClick={() => { setViewingUser(null); setFixLocationMessage(null); }} className="text-gray-400 hover:text-gray-600 p-1">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <div>
+                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Telefone / WhatsApp</p>
+                  <p className="text-sm font-bold text-gray-900">{u.phone || 'Não informado'}</p>
+                </div>
+
+                <div>
+                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Endereço Cadastrado</p>
+                  <p className="text-sm font-semibold text-gray-700">
+                    {addressLines.length > 0 ? addressLines.join(' — ') : 'Não informado'}
+                  </p>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Localização (usada para calcular o raio de entrega)</p>
+                    <button
+                      onClick={() => handleFixUserLocation(u)}
+                      disabled={fixingLocation}
+                      className="text-[9px] font-black text-brand uppercase tracking-wider hover:underline disabled:opacity-50 inline-flex items-center gap-1"
+                    >
+                      <RefreshCw size={10} className={fixingLocation ? 'animate-spin' : ''} /> Recalcular localização
+                    </button>
+                  </div>
+                  {u.lat && u.lng ? (
+                    <p className="text-sm font-semibold text-gray-700">
+                      {u.lat.toFixed(5)}, {u.lng.toFixed(5)}{' '}
+                      <a href={`https://www.google.com/maps?q=${u.lat},${u.lng}`} target="_blank" rel="noopener noreferrer" className="text-brand font-black text-[10px] uppercase ml-1 hover:underline">
+                        Ver no mapa
+                      </a>
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-400 italic">Ainda não calculada</p>
+                  )}
+                  {fixLocationMessage && (
+                    <p className="text-[10px] font-bold text-gray-600 mt-1">{fixLocationMessage}</p>
+                  )}
+                </div>
+
+                {distanceFromStoreKm !== null && (
+                  <div className={`rounded-xl p-3 border ${geocodeLooksWrong ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
+                    {geocodeLooksWrong ? (
+                      <>
+                        <p className="text-xs font-black text-red-700 uppercase tracking-tight">⚠️ Localização provavelmente errada</p>
+                        <p className="text-[11px] text-red-700 font-semibold mt-1">
+                          {distanceFromStoreKm.toFixed(1)} km do estabelecimento — distância implausível para uma entrega local. Provavelmente a rua não está mapeada no serviço gratuito de localização. Clique em "Recalcular localização" para tentar corrigir.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xs font-black text-green-700 uppercase tracking-tight">Distância até o estabelecimento</p>
+                        <p className="text-[11px] text-green-700 font-semibold mt-1">{distanceFromStoreKm.toFixed(1)} km</p>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <div className="pt-3 border-t border-gray-100 text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                  Cadastro: {u.createdAt ? format(new Date(u.createdAt), 'dd/MM/yyyy') : 'N/A'}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* TAB 4: COMPANY DETAILS / CONFIGURATIONS */}
       {activeTab === 'settings' && (

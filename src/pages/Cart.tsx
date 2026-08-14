@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
-import { formatCurrency, calculateDistance } from '../lib/utils';
+import { formatCurrency, calculateDistance, geocodeBrazilianAddress } from '../lib/utils';
 import { collection, addDoc, doc, onSnapshot } from 'firebase/firestore';
 import { db, sanitizeForFirestore } from '../lib/firebase';
 import { useNavigate } from 'react-router-dom';
@@ -96,35 +96,28 @@ export default function Cart() {
       let userLat = user.lat;
       let userLng = user.lng;
 
+      // Backs off through progressively broader (but still real) queries
+      // when the exact street isn't in the free geocoder's database —
+      // never falls back to a bare CEP search, which used to misparse the
+      // tail of the postal code as an unrelated place elsewhere in Brazil
+      // and could produce a wildly wrong "fora da área de entrega" block.
       if (!userLat || !userLng) {
         if (user.addressStreet && user.addressCity && user.addressZip) {
-          try {
-            const query = `${user.addressStreet} ${user.addressNumber || ''}, ${user.addressNeighborhood}, ${user.addressCity}, ${user.addressZip}, Brasil`;
-            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`, {
-              headers: { 'User-Agent': 'Restaurante-App' }
-            });
-            const geodata = await res.json();
-            if (geodata && geodata.length > 0) {
-              userLat = parseFloat(geodata[0].lat);
-              userLng = parseFloat(geodata[0].lon);
-            } else {
-              // Fallback to cep search if full address fails
-              const cepQuery = `${user.addressZip}, Brasil`;
-              const fallbackRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cepQuery)}`, {
-                headers: { 'User-Agent': 'Restaurante-App' }
-              });
-              const fallbackData = await fallbackRes.json();
-              if (fallbackData && fallbackData.length > 0) {
-                userLat = parseFloat(fallbackData[0].lat);
-                userLng = parseFloat(fallbackData[0].lon);
-              }
-            }
-          } catch (e) {
-            console.error("Geocoding on checkout failed", e);
+          const geo = await geocodeBrazilianAddress({
+            street: user.addressStreet,
+            number: user.addressNumber,
+            neighborhood: user.addressNeighborhood,
+            city: user.addressCity,
+            state: user.addressState,
+            zip: user.addressZip,
+          });
+          if (geo) {
+            userLat = geo.lat;
+            userLng = geo.lng;
           }
         } else if (user.address) {
           try {
-            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(user.address)}`, {
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=br&q=${encodeURIComponent(user.address)}`, {
               headers: { 'User-Agent': 'Restaurante-App' }
             });
             const geodata = await res.json();
