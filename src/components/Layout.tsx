@@ -26,7 +26,8 @@ import {
   Copy,
   Upload,
   Clock,
-  Image as ImageIcon
+  Image as ImageIcon,
+  CheckCircle2
 } from 'lucide-react';
 import { cn, getBillingPauseState, formatCountdown, compressImageToBase64, formatCurrency } from '../lib/utils';
 import { BillingInfo, BillingProofType } from '../types';
@@ -490,11 +491,13 @@ function BillingBanner({ billing, pauseState, user }: {
 }) {
   const [copied, setCopied] = useState(false);
   const [note, setNote] = useState('');
-  const [proposedDate, setProposedDate] = useState('');
+  const [proposedDay, setProposedDay] = useState<number | null>(null);
   const [fileName, setFileName] = useState('');
   const [uploading, setUploading] = useState(false);
   const [sent, setSent] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const DUE_DAY_OPTIONS = [1, 5, 10, 15, 20];
 
   const copyPix = () => {
     navigator.clipboard.writeText(billing.pixKey);
@@ -512,13 +515,30 @@ function BillingBanner({ billing, pauseState, user }: {
     return daysLeft <= 5 ? 'monthly_warning' : 'active_ok';
   })();
 
+  // The first monthly cycle always starts in September — this computes
+  // that September's date for whichever day of the month was chosen
+  // (falling forward a year in the edge case where September of the
+  // current year has already passed by the time this runs).
+  const getFirstDueDate = (day: number): number => {
+    const now = new Date();
+    let year = now.getFullYear();
+    if (now.getMonth() > 8 || (now.getMonth() === 8 && now.getDate() > day)) {
+      year += 1;
+    }
+    return new Date(year, 8, day, 12, 0, 0).getTime();
+  };
+
+  const canSubmit = phase === 'need_due_date'
+    ? proposedDay !== null
+    : !!fileName;
+
   const handleSendProof = async (type: BillingProofType) => {
     setUploading(true);
     try {
       const file = fileInputRef.current?.files?.[0];
       const imageUrl = file ? await compressImageToBase64(file) : null;
-      const requestedDueDate = type === 'set_due_date' && proposedDate
-        ? new Date(`${proposedDate}T12:00:00`).getTime()
+      const requestedDueDate = type === 'set_due_date' && proposedDay !== null
+        ? getFirstDueDate(proposedDay)
         : null;
       await addDoc(collection(db, 'billingProofs'), sanitizeForFirestore({
         senderId: user.uid,
@@ -533,7 +553,7 @@ function BillingBanner({ billing, pauseState, user }: {
       }));
       setSent(true);
       setNote('');
-      setProposedDate('');
+      setProposedDay(null);
       setFileName('');
       if (fileInputRef.current) fileInputRef.current.value = '';
       setTimeout(() => setSent(false), 5000);
@@ -620,6 +640,16 @@ function BillingBanner({ billing, pauseState, user }: {
               </div>
             </div>
 
+            {/* Plain-language how-to, always visible while a payment is pending */}
+            {phase !== 'need_due_date' && (
+              <div className={`mt-3 rounded-xl p-3 flex items-start gap-2 ${urgent ? 'bg-white/10' : 'bg-white/60 border border-amber-600/20'}`}>
+                <CheckCircle2 size={15} className={`shrink-0 mt-0.5 ${urgent ? 'text-white' : 'text-amber-700'}`} />
+                <p className={`text-[11px] font-bold leading-relaxed ${urgent ? 'text-white' : 'text-amber-900'}`}>
+                  Como funciona: 1) faça o pagamento pelo Pix acima. 2) Anexe o comprovante aqui embaixo (é obrigatório). 3) Pronto — o envio do comprovante pelo app é o jeito mais rápido de validar seu pagamento, muito mais rápido do que esperar sem enviar nada.
+                </p>
+              </div>
+            )}
+
             {/* Payment info card */}
             {phase !== 'need_due_date' && (
               <div className="mt-3 bg-white rounded-xl p-3 shadow-sm">
@@ -641,16 +671,26 @@ function BillingBanner({ billing, pauseState, user }: {
             {/* Upload / due-date proposal card */}
             <div className="mt-2 bg-white rounded-xl p-3 shadow-sm space-y-2">
               <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">
-                {phase === 'need_due_date' ? 'Escolha a data de vencimento' : 'Enviar comprovante de pagamento'}
+                {phase === 'need_due_date' ? 'Escolha o dia de vencimento mensal (a partir de setembro)' : 'Enviar comprovante de pagamento (obrigatório)'}
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 {phase === 'need_due_date' ? (
-                  <input
-                    type="date"
-                    value={proposedDate}
-                    onChange={e => setProposedDate(e.target.value)}
-                    className="text-xs font-bold rounded-lg px-3 py-2 text-gray-800 border border-gray-200 bg-gray-50"
-                  />
+                  <div className="flex flex-wrap gap-1.5">
+                    {DUE_DAY_OPTIONS.map(day => (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => setProposedDay(day)}
+                        className={`px-3 py-2 rounded-lg text-xs font-black transition-colors border-2 ${
+                          proposedDay === day
+                            ? 'bg-amber-600 text-white border-amber-700'
+                            : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-amber-400'
+                        }`}
+                      >
+                        Dia {day}
+                      </button>
+                    ))}
+                  </div>
                 ) : (
                   <>
                     <input
@@ -665,7 +705,7 @@ function BillingBanner({ billing, pauseState, user }: {
                       htmlFor="billing-proof-file"
                       className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider bg-gray-100 text-gray-700 hover:bg-gray-200 cursor-pointer transition-colors shrink-0"
                     >
-                      <Upload size={13} /> Selecionar Comprovante
+                      <Upload size={13} /> Selecionar Comprovante *
                     </label>
                     {fileName && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 max-w-[140px] truncate">
@@ -682,13 +722,16 @@ function BillingBanner({ billing, pauseState, user }: {
                   className="text-xs font-medium rounded-lg px-3 py-2 text-gray-800 border border-gray-200 bg-gray-50 flex-1 min-w-[140px]"
                 />
               </div>
+              {!canSubmit && phase !== 'need_due_date' && (
+                <p className="text-[10px] font-bold text-red-600">* É obrigatório anexar o comprovante para enviar.</p>
+              )}
               <button
                 type="button"
-                disabled={uploading || (phase === 'need_due_date' && !proposedDate)}
+                disabled={uploading || !canSubmit}
                 onClick={() => handleSendProof(proofType)}
                 className={`w-full sm:w-auto px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wider disabled:opacity-50 transition-colors ${urgent ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-amber-600 text-white hover:bg-amber-700'}`}
               >
-                {uploading ? 'Enviando...' : phase === 'need_due_date' ? 'Enviar Data Escolhida' : 'Enviar Comprovante'}
+                {uploading ? 'Enviando...' : phase === 'need_due_date' ? 'Enviar Dia Escolhido' : 'Enviar Comprovante'}
               </button>
               {sent && (
                 <p className="text-[11px] font-bold text-green-700">Enviado! Aguardando confirmação de Michel ou Rafael.</p>
