@@ -2,9 +2,10 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { collection, query, orderBy, onSnapshot, where, doc, setDoc, limit } from 'firebase/firestore';
 
 import { db, storage, sanitizeForFirestore, handleFirestoreError, OperationType } from '../lib/firebase';
-import { Order, FinanceEntry, CompanyInfo } from '../types';
-import { formatCurrency, calculateDistance, geocodeBrazilianAddress } from '../lib/utils';
-import { format, subDays } from 'date-fns';
+import { Order, FinanceEntry, CompanyInfo, BillingInfo, BillingProof } from '../types';
+import { formatCurrency, calculateDistance, geocodeBrazilianAddress, isBillingAdminEmail } from '../lib/utils';
+import { useAuth } from '../context/AuthContext';
+import { format, subDays, addMonths } from 'date-fns';
 import { Link, useSearchParams } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { 
@@ -38,7 +39,9 @@ import {
   Upload,
   Trash2,
   X,
-  AlertTriangle
+  AlertTriangle,
+  CreditCard,
+  Lock
 } from 'lucide-react';
 import { playNotificationSound } from '../lib/audio';
 import { DEFAULT_OPENING_HOURS, DAY_NAMES, DAYS_ORDER } from '../lib/openingHours';
@@ -69,9 +72,11 @@ const paymentMap = {
 type PeriodType = 'day' | 'week' | 'month' | 'trimester' | 'semester' | 'year';
 
 export default function AdminDashboard() {
+  const { user } = useAuth();
+  const isBillingAdmin = isBillingAdminEmail(user?.email);
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = (searchParams.get('tab') as 'realtime' | 'history' | 'crm' | 'settings' | 'users') || 'realtime';
-  const setActiveTab = (tab: 'realtime' | 'history' | 'crm' | 'settings' | 'users') => setSearchParams({ tab });
+  const activeTab = (searchParams.get('tab') as 'realtime' | 'history' | 'crm' | 'settings' | 'users' | 'billing') || 'realtime';
+  const setActiveTab = (tab: 'realtime' | 'history' | 'crm' | 'settings' | 'users' | 'billing') => setSearchParams({ tab });
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [finances, setFinances] = useState<FinanceEntry[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -86,6 +91,71 @@ export default function AdminDashboard() {
   // "distância até o estabelecimento" diagnostic below.
   const RESTAURANT_LAT = -22.8654801;
   const RESTAURANT_LNG = -43.3012176;
+
+  const [billing, setBilling] = useState<BillingInfo | null>(null);
+  const [billingProofs, setBillingProofs] = useState<BillingProof[]>([]);
+  const [confirmingProofId, setConfirmingProofId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'settings', 'billing'), (snapshot) => {
+      setBilling(snapshot.exists() ? (snapshot.data() as BillingInfo) : null);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (!isBillingAdmin) return;
+    const q = query(collection(db, 'billingProofs'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (snapshot) => {
+      setBillingProofs(snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as BillingProof[]);
+    });
+    return () => unsub();
+  }, [isBillingAdmin]);
+
+  const handleConfirmLaunchFee = async () => {
+    setConfirmingProofId('launch');
+    try {
+      await setDoc(doc(db, 'settings', 'billing'), {
+        launchFeePaid: true,
+        lastConfirmedPaymentAt: Date.now(),
+      }, { merge: true });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'settings/billing');
+    } finally {
+      setConfirmingProofId(null);
+    }
+  };
+
+  const handleConfirmDueDate = async (requestedDueDate: number, proofId: string) => {
+    setConfirmingProofId(proofId);
+    try {
+      await setDoc(doc(db, 'settings', 'billing'), {
+        nextDueDate: requestedDueDate,
+      }, { merge: true });
+      await setDoc(doc(db, 'billingProofs', proofId), { status: 'confirmed' }, { merge: true });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'settings/billing');
+    } finally {
+      setConfirmingProofId(null);
+    }
+  };
+
+  const handleConfirmMonthlyPayment = async (proofId: string) => {
+    if (!billing?.nextDueDate) return;
+    setConfirmingProofId(proofId);
+    try {
+      const newDueDate = addMonths(billing.nextDueDate, 1).getTime();
+      await setDoc(doc(db, 'settings', 'billing'), {
+        nextDueDate: newDueDate,
+        lastConfirmedPaymentAt: Date.now(),
+      }, { merge: true });
+      await setDoc(doc(db, 'billingProofs', proofId), { status: 'confirmed' }, { merge: true });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'settings/billing');
+    } finally {
+      setConfirmingProofId(null);
+    }
+  };
 
   const handleFixUserLocation = async (u: any) => {
     if (!u.addressStreet || !u.addressCity || !u.addressZip) {
@@ -589,6 +659,25 @@ export default function AdminDashboard() {
           <ShieldAlert size={16} />
           <span>Gerenciar Equipe</span>
         </button>
+
+        {isBillingAdmin && (
+          <button
+            onClick={() => setActiveTab('billing')}
+            className={`px-4 py-2.5 text-xs font-black uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 ${
+              activeTab === 'billing'
+                ? 'border-brand text-brand bg-brand/5'
+                : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+            }`}
+          >
+            <CreditCard size={16} />
+            <span>Cobrança</span>
+            {billingProofs.some(p => p.status === 'pending') && (
+              <span className="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold ml-1">
+                {billingProofs.filter(p => p.status === 'pending').length}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {/* TAB 1: REAL-TIME MONITOR */}
@@ -1130,26 +1219,35 @@ export default function AdminDashboard() {
                           >
                             <Eye size={12} /> Ver Dados
                           </button>
-                          <button
-                            onClick={async () => {
-                              const newRole = u.role === 'admin' ? 'user' : 'admin';
-                              if (window.confirm(`Deseja alterar o cargo de ${u.name} para ${newRole}?`)) {
-                                try {
-                                  await setDoc(doc(db, 'users', u.id), { role: newRole }, { merge: true });
-                                } catch (err) {
-                                  handleFirestoreError(err, OperationType.UPDATE, `users/${u.id}`);
+                          {isBillingAdminEmail(u.email) ? (
+                            <span
+                              title="Admin protegido — não pode ser rebaixado"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-wider bg-gray-100 text-gray-400 cursor-not-allowed"
+                            >
+                              <Lock size={12} /> Admin Protegido
+                            </span>
+                          ) : (
+                            <button
+                              onClick={async () => {
+                                const newRole = u.role === 'admin' ? 'user' : 'admin';
+                                if (window.confirm(`Deseja alterar o cargo de ${u.name} para ${newRole}?`)) {
+                                  try {
+                                    await setDoc(doc(db, 'users', u.id), { role: newRole }, { merge: true });
+                                  } catch (err) {
+                                    handleFirestoreError(err, OperationType.UPDATE, `users/${u.id}`);
+                                  }
                                 }
-                              }
-                            }}
-                            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-wider transition-colors ${
-                              u.role === 'admin'
-                                ? 'bg-red-50 text-red-600 hover:bg-red-100'
-                                : 'bg-brand text-white hover:bg-brand-dark'
-                            }`}
-                          >
-                            {u.role === 'admin' ? <TrendingDown size={12} /> : <TrendingUp size={12} />}
-                            {u.role === 'admin' ? 'Remover Admin' : 'Tornar Admin'}
-                          </button>
+                              }}
+                              className={`inline-flex items-center gap-1 px-3 py-1.5 rounded text-[10px] font-black uppercase tracking-wider transition-colors ${
+                                u.role === 'admin'
+                                  ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                                  : 'bg-brand text-white hover:bg-brand-dark'
+                              }`}
+                            >
+                              {u.role === 'admin' ? <TrendingDown size={12} /> : <TrendingUp size={12} />}
+                              {u.role === 'admin' ? 'Remover Admin' : 'Tornar Admin'}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1268,6 +1366,129 @@ export default function AdminDashboard() {
           </div>
         );
       })()}
+
+      {/* TAB 6: BILLING / CENTRAL DE COBRANÇA — Michel & Rafael only */}
+      {activeTab === 'billing' && isBillingAdmin && (
+        <div className="space-y-6">
+          <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+            <h3 className="font-black text-xs text-gray-900 uppercase tracking-widest flex items-center gap-2 mb-4">
+              <CreditCard size={14} className="text-brand" /> Status da Cobrança
+            </h3>
+            {billing ? (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Taxa de Lançamento ({formatCurrency(billing.launchFeeAmount)})</p>
+                  <p className={`font-black ${billing.launchFeePaid ? 'text-green-700' : 'text-red-600'}`}>
+                    {billing.launchFeePaid ? 'PAGA' : 'PENDENTE'}
+                  </p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Mensalidade ({formatCurrency(billing.monthlyFeeAmount)})</p>
+                  <p className="font-black text-gray-800">
+                    {billing.nextDueDate ? `Vence em ${format(billing.nextDueDate, 'dd/MM/yyyy')}` : 'Vencimento não definido'}
+                  </p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Último pagamento confirmado</p>
+                  <p className="font-black text-gray-800">
+                    {billing.lastConfirmedPaymentAt ? format(billing.lastConfirmedPaymentAt, 'dd/MM/yyyy HH:mm') : '—'}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 font-bold">Carregando...</p>
+            )}
+            {!billing?.launchFeePaid && (
+              <button
+                onClick={handleConfirmLaunchFee}
+                disabled={confirmingProofId === 'launch'}
+                className="mt-4 bg-brand text-white px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-brand-dark disabled:opacity-50"
+              >
+                {confirmingProofId === 'launch' ? 'Confirmando...' : 'Confirmar Taxa de Lançamento Recebida'}
+              </button>
+            )}
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+            <div className="p-4 bg-gray-50/70 border-b border-gray-200">
+              <h3 className="font-black text-xs text-gray-900 uppercase tracking-widest flex items-center gap-2">
+                <Lock size={14} className="text-brand" /> Comprovantes e Solicitações Recebidas
+              </h3>
+              <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Caixa exclusiva — visível apenas para Michel e Rafael</p>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {billingProofs.length === 0 && (
+                <div className="text-center py-8">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Nenhum comprovante enviado ainda</p>
+                </div>
+              )}
+              {billingProofs.map(proof => (
+                <div key={proof.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-xs text-gray-900">{proof.senderName}</span>
+                      <span className="text-[9px] text-gray-400 font-semibold">{proof.senderEmail}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase border ${
+                        proof.status === 'confirmed'
+                          ? 'bg-green-100 text-green-700 border-green-200'
+                          : 'bg-amber-100 text-amber-700 border-amber-200'
+                      }`}>
+                        {proof.status === 'confirmed' ? 'Confirmado' : 'Pendente'}
+                      </span>
+                      <span className="text-[9px] text-gray-400 font-bold uppercase">
+                        {proof.type === 'launch_fee' ? 'Taxa de Lançamento' : proof.type === 'monthly' ? 'Mensalidade' : 'Proposta de Vencimento'}
+                      </span>
+                    </div>
+                    {proof.note && <p className="text-[11px] text-gray-600 font-medium mt-1">{proof.note}</p>}
+                    {proof.requestedDueDate && (
+                      <p className="text-[11px] text-gray-600 font-bold mt-1">Data proposta: {format(proof.requestedDueDate, 'dd/MM/yyyy')}</p>
+                    )}
+                    {proof.imageUrl && (
+                      <a href={proof.imageUrl} target="_blank" rel="noopener noreferrer" className="inline-block mt-2">
+                        <img src={proof.imageUrl} alt="Comprovante" className="h-20 rounded-lg border border-gray-200 object-cover" />
+                      </a>
+                    )}
+                    <p className="text-[9px] text-gray-400 font-bold mt-1 uppercase tracking-wider">
+                      {format(proof.createdAt, 'dd/MM/yyyy HH:mm')}
+                    </p>
+                  </div>
+                  {proof.status === 'pending' && (
+                    <div className="shrink-0">
+                      {proof.type === 'launch_fee' && (
+                        <button
+                          onClick={handleConfirmLaunchFee}
+                          disabled={confirmingProofId === 'launch'}
+                          className="bg-brand text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-brand-dark disabled:opacity-50"
+                        >
+                          Confirmar Pagamento
+                        </button>
+                      )}
+                      {proof.type === 'set_due_date' && proof.requestedDueDate && (
+                        <button
+                          onClick={() => handleConfirmDueDate(proof.requestedDueDate!, proof.id)}
+                          disabled={confirmingProofId === proof.id}
+                          className="bg-brand text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-brand-dark disabled:opacity-50"
+                        >
+                          Confirmar Vencimento
+                        </button>
+                      )}
+                      {proof.type === 'monthly' && (
+                        <button
+                          onClick={() => handleConfirmMonthlyPayment(proof.id)}
+                          disabled={confirmingProofId === proof.id}
+                          className="bg-brand text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-brand-dark disabled:opacity-50"
+                        >
+                          Confirmar Mensalidade
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* TAB 4: COMPANY DETAILS / CONFIGURATIONS */}
       {activeTab === 'settings' && (

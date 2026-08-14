@@ -23,11 +23,44 @@ service cloud.firestore {
       return email == 'michelgeminicriador@gmail.com' || email == 'felixcastroadv@gmail.com';
     }
 
-    // Company-wide settings (name, hours, logo). Everyone signed in can read;
-    // only admins can change it.
+    // The two developer accounts that own billing/pause enforcement for
+    // this client's app. Their admin role can never be revoked (see the
+    // `users/{userId}` update rule), and only they can confirm a payment
+    // (settings/billing) or resolve a billing proof — the paying client is
+    // an admin themselves and must not be able to grant this to themselves.
+    function isBillingAdminEmail(email) {
+      return email == 'michelgeminicriador@gmail.com' || email == 'rafaelvitorsantos08@gmail.com';
+    }
+
+    // Company-wide settings (name, hours, logo). Everyone signed in can
+    // read; only admins can change it — except settingId == 'billing',
+    // which is carved out below and excluded here so that more specific
+    // rule doesn't get OR'd open by this general one.
     match /settings/{settingId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if isAdmin() && settingId != 'billing';
+    }
+
+    // Billing/pause state. Any admin can read it (needed for the banner)
+    // and can create the doc once (bootstrap, harmless either way — it
+    // always starts unpaid with a fresh 48h deadline). Every update after
+    // that requires a billing-admin account, so the paying client can
+    // never mark their own payment as received or push their due date out.
+    match /settings/billing {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && request.resource.data.launchFeePaid == false;
+      allow update: if isSignedIn() && isBillingAdminEmail(request.auth.token.email);
+    }
+
+    // Payment proof submissions. Any admin can attach a proof for
+    // themselves; only a billing admin (or the original sender, so the
+    // client can see her own submission's status) can read the collection,
+    // and only a billing admin can mark one confirmed/edit it.
+    match /billingProofs/{proofId} {
+      allow read: if isAdmin() &&
+        (isOwner(resource.data.senderId) || isBillingAdminEmail(request.auth.token.email));
+      allow create: if isAdmin() && request.resource.data.senderId == request.auth.uid;
+      allow update, delete: if isSignedIn() && isBillingAdminEmail(request.auth.token.email);
     }
 
     // Menu items. Prices/availability must never be writable by customers.
@@ -38,17 +71,22 @@ service cloud.firestore {
 
     // User profiles. Anyone can read/update their own profile, but the
     // `role` field can only ever be changed by an existing admin — this is
-    // what stops a customer from self-promoting to admin.
+    // what stops a customer from self-promoting to admin. A billing-admin
+    // account (Michel/Rafael) can never be demoted or deleted by anyone,
+    // including another admin or themselves — the client who owes money is
+    // an admin on her own account and must not be able to remove the two
+    // people enforcing payment.
     match /users/{userId} {
       allow read: if isAdmin() || isOwner(userId);
       allow create: if isOwner(userId) &&
         (request.resource.data.role == 'user' ||
          (request.resource.data.role == 'admin' && isBootstrapOwnerEmail(request.resource.data.email)));
-      allow update: if isAdmin() ||
+      allow update: if (isAdmin() ||
         (isOwner(userId) &&
          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']) ||
-          (request.resource.data.role == 'admin' && isBootstrapOwnerEmail(request.resource.data.email))));
-      allow delete: if isAdmin();
+          (request.resource.data.role == 'admin' && isBootstrapOwnerEmail(request.resource.data.email))))) &&
+        !(isBillingAdminEmail(resource.data.email) && request.resource.data.role != 'admin');
+      allow delete: if isAdmin() && !isBillingAdminEmail(resource.data.email);
     }
 
     // Orders. Customers can only create orders for themselves and can only

@@ -100,3 +100,34 @@ export interface CompanyInfo {
   deliveryFee?: number;
 }
 
+// Lives at settings/billing. Governs whether the app is paused for
+// non-payment. launchFeePaid/nextDueDate/lastConfirmedPaymentAt are
+// write-protected in firestore.rules to the two developer accounts —
+// everything else in the app treats this document as read-only truth.
+export interface BillingInfo {
+  launchFeePaid: boolean;
+  launchFeeDeadline: number; // timestamp; app pauses if unpaid past this
+  launchFeeAmount: number;
+  monthlyFeeAmount: number;
+  nextDueDate: number | null; // timestamp of the next monthly due date
+  lastConfirmedPaymentAt: number | null;
+  pixKey: string;
+  pixBeneficiary: string;
+  pixBank: string;
+}
+
+export type BillingProofType = 'launch_fee' | 'monthly' | 'set_due_date';
+
+export interface BillingProof {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderEmail: string;
+  imageUrl?: string;
+  note?: string;
+  requestedDueDate?: number | null;
+  type: BillingProofType;
+  status: 'pending' | 'confirmed';
+  createdAt: number;
+}
+

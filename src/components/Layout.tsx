@@ -1,17 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
-import { onSnapshot, doc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { 
-  UtensilsCrossed, 
-  ShoppingCart, 
-  History, 
-  LogOut, 
-  LayoutDashboard, 
-  Menu as MenuIcon, 
-  DollarSign, 
+import { onSnapshot, doc, setDoc, addDoc, collection } from 'firebase/firestore';
+import { db, sanitizeForFirestore } from '../lib/firebase';
+import { format } from 'date-fns';
+import {
+  UtensilsCrossed,
+  ShoppingCart,
+  History,
+  LogOut,
+  LayoutDashboard,
+  Menu as MenuIcon,
+  DollarSign,
   Bell,
   Download,
   User as UserIcon,
@@ -19,9 +20,12 @@ import {
   PlusSquare,
   X,
   Smartphone,
-  Laptop
+  Laptop,
+  AlertTriangle,
+  Copy
 } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, getBillingPauseState, formatCountdown, compressImageToBase64, formatCurrency } from '../lib/utils';
+import { BillingInfo, BillingProofType } from '../types';
 import { useExitGuard } from '../hooks/useExitGuard';
 import CookieConsentBanner from './CookieConsentBanner';
 
@@ -41,6 +45,37 @@ export default function Layout() {
   const [companyInfo, setCompanyInfo] = useState<{ name: string; logoUrl?: string }>({
     name: "Irmãos Pilar"
   });
+  const [billing, setBilling] = useState<BillingInfo | null>(null);
+  const [billingLoaded, setBillingLoaded] = useState(false);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'settings', 'billing'), (snapshot) => {
+      setBilling(snapshot.exists() ? (snapshot.data() as BillingInfo) : null);
+      setBillingLoaded(true);
+    });
+    return () => unsub();
+  }, []);
+
+  // The first admin to load the app after this billing gate ships starts
+  // the 48h launch-fee clock — there's no server-side cron to do this, so
+  // it's bootstrapped client-side the first time an admin is present and
+  // the doc doesn't exist yet.
+  useEffect(() => {
+    if (!billingLoaded || billing || !user || user.role !== 'admin') return;
+    setDoc(doc(db, 'settings', 'billing'), {
+      launchFeePaid: false,
+      launchFeeDeadline: Date.now() + 48 * 60 * 60 * 1000,
+      launchFeeAmount: 200,
+      monthlyFeeAmount: 100,
+      nextDueDate: null,
+      lastConfirmedPaymentAt: null,
+      pixKey: '21990857331',
+      pixBeneficiary: 'Rafael Vitor Silva',
+      pixBank: 'Infinite Pay',
+    }).catch(err => console.error('Failed to bootstrap billing doc', err));
+  }, [billingLoaded, billing, user]);
+
+  const pauseState = useMemo(() => getBillingPauseState(billing), [billing]);
 
   useEffect(() => {
     // Escuta alterações de nome e logo em tempo real
@@ -134,6 +169,23 @@ export default function Layout() {
     return <div className="min-h-screen flex items-center justify-center">Carregando...</div>;
   }
 
+  // Non-admin (customer) access is fully blocked while paused — this is a
+  // billing dispute, not something to explain to end customers, so the
+  // message stays neutral. Admins keep full access so they can resolve it.
+  if (user && !isAdmin && pauseState.paused) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-canvas p-6 text-center">
+        <div>
+          <div className="w-16 h-16 bg-gray-200 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <UtensilsCrossed size={28} className="text-gray-400" />
+          </div>
+          <h1 className="font-black text-lg text-gray-900 uppercase tracking-wide mb-2">Serviço Temporariamente Indisponível</h1>
+          <p className="text-sm text-gray-500 font-medium max-w-sm mx-auto">Estamos em manutenção no momento. Pedimos desculpas pelo transtorno — voltamos em breve.</p>
+        </div>
+      </div>
+    );
+  }
+
   const handleLogout = async () => {
     logout();
     navigate('/login');
@@ -141,6 +193,10 @@ export default function Layout() {
 
   return (
     <div className="flex flex-col min-h-[100dvh]">
+      {isAdmin && user && billing && (
+        <BillingBanner billing={billing} pauseState={pauseState} user={user} />
+      )}
+
       {/* GLOBAL INSTALL BANNER - Displayed whenever app is accessed via web browser */}
       {user && !isStandalone && showInstallBanner && (
         <div className="bg-brand text-white px-4 py-2.5 flex items-center justify-between shadow-md z-50 sticky top-0 w-full animate-fade-in">
@@ -402,8 +458,8 @@ function NavLink({ to, current, icon, label }: { to: string, current: string, ic
 function MobileTabLink({ to, current, icon, label }: { to: string, current: string, icon: React.ReactNode, label: string }) {
   const isActive = current === to;
   return (
-    <Link 
-      to={to} 
+    <Link
+      to={to}
       className={cn(
         "flex flex-col items-center justify-center flex-1 h-full py-1 text-center transition-colors gap-0.5",
         isActive ? "text-brand font-bold" : "text-gray-500 font-medium"
@@ -414,5 +470,166 @@ function MobileTabLink({ to, current, icon, label }: { to: string, current: stri
       </div>
       <span className="text-[9px] uppercase tracking-wider leading-none">{label}</span>
     </Link>
+  );
+}
+
+// Persistent, non-dismissable billing status strip shown to every admin on
+// every admin page (rendered once in Layout so it can never be closed or
+// scrolled away from). Its content and urgency change with billing phase;
+// it always carries a way to copy the Pix key and submit a payment proof.
+type BillingPhase = 'launch_pending' | 'launch_paused' | 'need_due_date' | 'active_ok' | 'monthly_warning' | 'monthly_paused';
+
+function BillingBanner({ billing, pauseState, user }: {
+  billing: BillingInfo;
+  pauseState: { paused: boolean; reason: 'launch_fee_overdue' | 'monthly_overdue' | null; deadline: number | null };
+  user: { uid: string; name: string; email: string };
+}) {
+  const [copied, setCopied] = useState(false);
+  const [note, setNote] = useState('');
+  const [proposedDate, setProposedDate] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [sent, setSent] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const copyPix = () => {
+    navigator.clipboard.writeText(billing.pixKey);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const phase: BillingPhase = (() => {
+    if (!billing.launchFeePaid) {
+      return pauseState.paused ? 'launch_paused' : 'launch_pending';
+    }
+    if (!billing.nextDueDate) return 'need_due_date';
+    if (pauseState.paused) return 'monthly_paused';
+    const daysLeft = Math.ceil((billing.nextDueDate - Date.now()) / (24 * 60 * 60 * 1000));
+    return daysLeft <= 5 ? 'monthly_warning' : 'active_ok';
+  })();
+
+  const handleSendProof = async (type: BillingProofType) => {
+    setUploading(true);
+    try {
+      const file = fileInputRef.current?.files?.[0];
+      const imageUrl = file ? await compressImageToBase64(file) : null;
+      const requestedDueDate = type === 'set_due_date' && proposedDate
+        ? new Date(`${proposedDate}T12:00:00`).getTime()
+        : null;
+      await addDoc(collection(db, 'billingProofs'), sanitizeForFirestore({
+        senderId: user.uid,
+        senderName: user.name,
+        senderEmail: user.email,
+        imageUrl,
+        note: note.trim() || null,
+        requestedDueDate,
+        type,
+        status: 'pending',
+        createdAt: Date.now(),
+      }));
+      setSent(true);
+      setNote('');
+      setProposedDate('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setTimeout(() => setSent(false), 5000);
+    } catch (err) {
+      console.error('Failed to send billing proof', err);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  if (phase === 'active_ok') {
+    const daysLeft = Math.ceil((billing.nextDueDate! - Date.now()) / (24 * 60 * 60 * 1000));
+    return (
+      <div className="bg-emerald-50 border-b border-emerald-200 px-4 py-2 text-center text-[11px] font-bold text-emerald-800 sticky top-0 z-[70]">
+        Próxima mensalidade ({formatCurrency(billing.monthlyFeeAmount)}) vence em {format(billing.nextDueDate!, 'dd/MM/yyyy')} — faltam {daysLeft} dia{daysLeft !== 1 ? 's' : ''}.
+      </div>
+    );
+  }
+
+  const urgent = phase === 'launch_paused' || phase === 'monthly_paused';
+  const isMonthly = phase === 'monthly_warning' || phase === 'monthly_paused';
+  const amount = isMonthly ? billing.monthlyFeeAmount : billing.launchFeeAmount;
+  const label = isMonthly ? 'Mensalidade' : 'Taxa de Lançamento';
+  const proofType: BillingProofType = phase === 'need_due_date' ? 'set_due_date' : isMonthly ? 'monthly' : 'launch_fee';
+
+  return (
+    <div className={`sticky top-0 z-[70] px-4 py-3 border-b ${urgent ? 'bg-red-600 text-white border-red-700' : 'bg-amber-50 text-amber-900 border-amber-200'}`}>
+      <div className="max-w-4xl mx-auto space-y-2">
+        <div className="flex items-start gap-2">
+          <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            {phase === 'need_due_date' ? (
+              <p className="text-xs font-black uppercase tracking-wide">
+                Escolha a data de vencimento da 1ª mensalidade ({formatCurrency(billing.monthlyFeeAmount)}, a partir de setembro)
+              </p>
+            ) : (
+              <>
+                <p className="text-xs font-black uppercase tracking-wide">
+                  {urgent
+                    ? `App pausado — ${label} (${formatCurrency(amount)}) não confirmada`
+                    : `${label} pendente — ${formatCurrency(amount)}`}
+                </p>
+                <p className={`text-[11px] font-semibold mt-0.5 ${urgent ? 'text-white/90' : 'text-amber-700'}`}>
+                  {urgent
+                    ? 'Envie o comprovante abaixo. Apenas Michel ou Rafael podem confirmar o pagamento e liberar o app.'
+                    : pauseState.deadline
+                    ? `Prazo: ${formatCountdown(pauseState.deadline)} — após o prazo, o app pausa automaticamente.`
+                    : ''}
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+
+        {phase !== 'need_due_date' && (
+          <div className={`flex flex-wrap items-center gap-2 text-[11px] font-bold rounded-lg px-3 py-2 ${urgent ? 'bg-white/10' : 'bg-white border border-amber-200'}`}>
+            <span>PIX: {billing.pixKey}</span>
+            <button
+              type="button"
+              onClick={copyPix}
+              className={`px-2 py-1 rounded font-black uppercase tracking-wider flex items-center gap-1 ${urgent ? 'bg-white text-red-700' : 'bg-amber-600 text-white'}`}
+            >
+              <Copy size={11} /> {copied ? 'Copiado!' : 'Copiar'}
+            </button>
+            <span className="opacity-80">{billing.pixBeneficiary} — {billing.pixBank}</span>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          {phase === 'need_due_date' ? (
+            <input
+              type="date"
+              value={proposedDate}
+              onChange={e => setProposedDate(e.target.value)}
+              className="text-[11px] font-bold rounded-lg px-2 py-1.5 text-gray-800"
+            />
+          ) : (
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className={`text-[10px] font-bold max-w-[200px] ${urgent ? 'text-white' : 'text-amber-800'}`}
+            />
+          )}
+          <input
+            type="text"
+            placeholder="Observação (opcional)"
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            className="text-[11px] font-bold rounded-lg px-2 py-1.5 text-gray-800 flex-1 min-w-[140px]"
+          />
+          <button
+            type="button"
+            disabled={uploading || (phase === 'need_due_date' && !proposedDate)}
+            onClick={() => handleSendProof(proofType)}
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider disabled:opacity-50 shrink-0 ${urgent ? 'bg-white text-red-700' : 'bg-amber-600 text-white'}`}
+          >
+            {uploading ? 'Enviando...' : phase === 'need_due_date' ? 'Enviar Data' : 'Enviar Comprovante'}
+          </button>
+        </div>
+        {sent && <p className="text-[10px] font-bold">Enviado! Aguardando confirmação de Michel ou Rafael.</p>}
+      </div>
+    </div>
   );
 }
