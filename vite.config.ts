@@ -24,15 +24,23 @@ export default defineConfig(() => {
           orientation: 'portrait',
           start_url: '/',
           scope: '/',
+          // Icons are pinned to a fixed GitHub commit (not the `main`
+          // branch) so AI Studio's binary-write bug, which has repeatedly
+          // corrupted these files locally (every 0x89 byte gets mangled
+          // into a UTF-8 replacement character, breaking the PNG
+          // signature), can never affect what's actually served —
+          // raw.githubusercontent.com serves the exact bytes of that
+          // commit forever, regardless of what happens to the repo
+          // afterwards.
           icons: [
             {
-              src: '/icon-192.png',
+              src: 'https://raw.githubusercontent.com/MichelCriadorFelix/irmaospilarrestautante/52978a212439971968dd6e673142391d5cea2b88/public/icon-192.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any maskable'
             },
             {
-              src: '/icon-512.png',
+              src: 'https://raw.githubusercontent.com/MichelCriadorFelix/irmaospilarrestautante/52978a212439971968dd6e673142391d5cea2b88/public/icon-512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any maskable'
@@ -43,7 +51,7 @@ export default defineConfig(() => {
               name: 'Painel Admin',
               short_name: 'Admin',
               url: '/admin',
-              icons: [{ src: '/icon-192.png', sizes: '192x192' }]
+              icons: [{ src: 'https://raw.githubusercontent.com/MichelCriadorFelix/irmaospilarrestautante/52978a212439971968dd6e673142391d5cea2b88/public/icon-192.png', sizes: '192x192' }]
             }
           ]
         },
