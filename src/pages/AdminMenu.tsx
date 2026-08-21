@@ -11,6 +11,7 @@ export default function AdminMenu() {
   const [products, setProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const formRef = useRef<HTMLDivElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<Product>>({
     name: '',
@@ -115,6 +116,13 @@ export default function AdminMenu() {
     setImageFile(null);
     setEditingId(product.id);
     setIsFormOpen(true);
+    // The list can be long enough that opening the form off-screen (above
+    // the current scroll position) looks like nothing happened — scroll to
+    // it once it's actually mounted (isFormOpen's re-render hasn't
+    // happened yet at this point in the function).
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   };
 
   const handleAddNew = () => {
@@ -130,6 +138,9 @@ export default function AdminMenu() {
     setImageFile(null);
     setEditingId(null);
     setIsFormOpen(true);
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -206,7 +217,7 @@ export default function AdminMenu() {
       </div>
 
       {isFormOpen && (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
+        <div ref={formRef} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6 scroll-mt-20">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-sm font-black text-gray-900 uppercase tracking-wider">{editingId ? 'Editar Item' : 'Novo Item'}</h2>
             <button onClick={() => setIsFormOpen(false)} className="text-gray-400 hover:text-gray-600">
