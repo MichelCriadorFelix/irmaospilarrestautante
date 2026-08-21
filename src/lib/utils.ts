@@ -197,3 +197,103 @@ export function compressImageToBase64(file: File, maxWidth = 800, maxHeight = 80
     reader.onerror = (error) => reject(error);
   });
 }
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Uploads via our own Vercel serverless function (api/upload-image.ts),
+// which holds the Supabase service-role credential and writes to Supabase
+// Storage — same pattern already used in the Sensação Gourmet app, reusing
+// that account's Supabase project (a separate bucket for this app).
+async function uploadToImageHost(blob: Blob, path: string, contentType: string): Promise<string> {
+  const base64 = await blobToBase64(blob);
+  const res = await fetch('/api/upload-image', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, contentType, base64 }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Upload failed with status ${res.status}`);
+  }
+  const { url } = await res.json();
+  return url;
+}
+
+// Resizes an image client-side and uploads it, returning a short public
+// URL — used instead of embedding a base64 data URI directly in a
+// Firestore document, which bloats every document that references it and
+// makes every read of that collection slow (the whole menu loading in
+// minutes instead of instantly).
+export function compressAndUploadImage(
+  file: File,
+  storagePath: string,
+  maxWidth = 800,
+  maxHeight = 800,
+  quality = 0.7
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Failed to get canvas context'));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(async (blob) => {
+          if (!blob) {
+            reject(new Error('Failed to create image blob'));
+            return;
+          }
+          try {
+            const url = await uploadToImageHost(blob, storagePath, 'image/jpeg');
+            resolve(url);
+          } catch (err) {
+            reject(err);
+          }
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = (error) => reject(error);
+    };
+    reader.onerror = (error) => reject(error);
+  });
+}
+
+// Uploads an already-inlined base64 image (e.g. a legacy imageUrl saved
+// directly into a Firestore document), returning the new public URL. Used
+// to migrate old documents the first time they're loaded, without needing
+// a separate one-off migration script.
+export async function migrateBase64ImageToStorage(dataUrl: string, storagePath: string): Promise<string> {
+  const response = await fetch(dataUrl);
+  const blob = await response.blob();
+  return uploadToImageHost(blob, storagePath, blob.type || 'image/jpeg');
+}

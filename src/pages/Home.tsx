@@ -377,6 +377,11 @@ function ProductCard({
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 flex flex-col justify-between hover:shadow-md transition-shadow">
       <div>
+        {product.imageUrl && (
+          <div className="w-full aspect-video rounded-lg overflow-hidden mb-2 bg-gray-50">
+            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+          </div>
+        )}
         <div className="flex justify-between items-start mb-1">
           <div className="flex-1">
             <h3 className="text-xs font-bold text-gray-900 leading-tight" translate="no">{product.name}</h3>

@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { collection, query, onSnapshot, doc, updateDoc, deleteDoc, setDoc, addDoc } from 'firebase/firestore';
 import { db, sanitizeForFirestore, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Product } from '../types';
-import { formatCurrency } from '../lib/utils';
-import { Edit, Trash2, Plus, X, Check, AlertTriangle, AlertCircle, Search } from 'lucide-react';
+import { formatCurrency, compressAndUploadImage, migrateBase64ImageToStorage } from '../lib/utils';
+import { Edit, Trash2, Plus, X, Check, AlertTriangle, AlertCircle, Search, Image as ImageIcon, UploadCloud } from 'lucide-react';
 import { initialMenu } from '../lib/seedData';
 import { AnimatePresence, motion } from 'framer-motion';
 
@@ -20,6 +20,8 @@ export default function AdminMenu() {
     available: true,
   });
 
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [alert, setAlert] = useState<{
     type: 'success' | 'error' | 'info';
@@ -42,6 +44,23 @@ export default function AdminMenu() {
     });
     return () => unsub();
   }, []);
+
+  // Self-healing migration: if a photo is ever saved as an inline base64
+  // string (e.g. an old/manually-edited document) rather than a Storage
+  // URL, move it to Storage in the background and swap in the short URL —
+  // an embedded image in every product doc would slow down every menu load.
+  const migratingRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    products.forEach(product => {
+      if (product.imageUrl?.startsWith('data:image') && !migratingRef.current.has(product.id)) {
+        migratingRef.current.add(product.id);
+        migrateBase64ImageToStorage(product.imageUrl, `products/${product.id}-${Date.now()}.jpg`)
+          .then(url => updateDoc(doc(db, 'products', product.id), { imageUrl: url }))
+          .catch(err => console.error('Falha ao migrar imagem do produto', product.id, err))
+          .finally(() => migratingRef.current.delete(product.id));
+      }
+    });
+  }, [products]);
 
   const handleToggleAvailable = async (product: Product) => {
     try {
@@ -93,6 +112,7 @@ export default function AdminMenu() {
 
   const handleEdit = (product: Product) => {
     setFormData(product);
+    setImageFile(null);
     setEditingId(product.id);
     setIsFormOpen(true);
   };
@@ -107,14 +127,26 @@ export default function AdminMenu() {
       options: [],
       available: true,
     });
+    setImageFile(null);
     setEditingId(null);
     setIsFormOpen(true);
   };
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) setImageFile(file);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const sanitizedData = sanitizeForFirestore(formData);
+    setIsUploading(true);
     try {
+      let imageUrl = formData.imageUrl;
+      if (imageFile) {
+        const storagePath = `products/${editingId || Date.now()}-${Date.now()}.jpg`;
+        imageUrl = await compressAndUploadImage(imageFile, storagePath, 800, 800, 0.7);
+      }
+      const sanitizedData = sanitizeForFirestore({ ...formData, imageUrl });
       if (editingId) {
         await updateDoc(doc(db, 'products', editingId), sanitizedData as any);
         setAlert({
@@ -132,8 +164,11 @@ export default function AdminMenu() {
       }
       setIsFormOpen(false);
       setEditingId(null);
+      setImageFile(null);
     } catch (err) {
       handleFirestoreError(err, editingId ? OperationType.UPDATE : OperationType.CREATE, 'products');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -187,6 +222,27 @@ export default function AdminMenu() {
               <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Descrição</label>
               <input type="text" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full px-3 py-2 border border-gray-200 bg-gray-50 rounded-lg text-sm focus:outline-none focus:ring-brand focus:border-brand" />
             </div>
+            <div className="md:col-span-2">
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Foto do Item</label>
+              <div className="flex items-center gap-4">
+                {(imageFile || formData.imageUrl) && (
+                  <div className="w-20 h-20 rounded-lg overflow-hidden border border-gray-200 shrink-0 bg-gray-50">
+                    <img
+                      src={imageFile ? URL.createObjectURL(imageFile) : formData.imageUrl}
+                      alt="Prévia"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
+                <label className="flex-1 cursor-pointer">
+                  <div className="flex items-center justify-center gap-2 px-3 py-2.5 border-2 border-dashed border-gray-200 rounded-lg text-xs font-bold text-gray-500 hover:border-brand hover:text-brand transition-colors">
+                    {imageFile ? <ImageIcon size={16} /> : <UploadCloud size={16} />}
+                    {imageFile ? 'Trocar Imagem' : 'Selecionar Imagem'}
+                  </div>
+                  <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+                </label>
+              </div>
+            </div>
             <div>
               <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Categoria</label>
               <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value as any})} className="w-full px-3 py-2 border border-gray-200 bg-gray-50 rounded-lg text-sm focus:outline-none focus:ring-brand focus:border-brand">
@@ -212,7 +268,9 @@ export default function AdminMenu() {
             )}
             <div className="md:col-span-2 flex justify-end gap-2 mt-2">
               <button type="button" onClick={() => setIsFormOpen(false)} className="px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-gray-50">Cancelar</button>
-              <button type="submit" className="px-4 py-2 bg-brand text-white rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-brand-dark">Salvar Item</button>
+              <button type="submit" disabled={isUploading} className="px-4 py-2 bg-brand text-white rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-brand-dark disabled:opacity-50">
+                {isUploading ? 'Enviando...' : 'Salvar Item'}
+              </button>
             </div>
           </form>
         </div>
@@ -290,6 +348,13 @@ export default function AdminMenu() {
             filteredProducts.map(product => (
               <div key={product.id} className="p-4 hover:bg-gray-50/50 transition-colors">
                 <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="w-14 h-14 rounded-lg overflow-hidden border border-gray-100 shrink-0 bg-gray-50 flex items-center justify-center">
+                    {product.imageUrl ? (
+                      <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <ImageIcon size={18} className="text-gray-300" />
+                    )}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       <h3 className="text-sm font-black text-gray-900 leading-snug" translate="no">
@@ -371,6 +436,7 @@ export default function AdminMenu() {
           <table className="min-w-full divide-y divide-gray-100">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
+                <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Foto</th>
                 <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Item</th>
                 <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Categoria</th>
                 <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Preço</th>
@@ -382,6 +448,15 @@ export default function AdminMenu() {
               {filteredProducts.length > 0 ? (
                 filteredProducts.map(product => (
                   <tr key={product.id} className="hover:bg-gray-50/80 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="w-10 h-10 rounded-lg overflow-hidden border border-gray-100 bg-gray-50 flex items-center justify-center">
+                        {product.imageUrl ? (
+                          <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <ImageIcon size={14} className="text-gray-300" />
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-3">
                       <div className="text-xs font-bold text-gray-900 leading-tight" translate="no">{product.name}</div>
                       <div className="text-[10px] text-gray-500 truncate max-w-[280px] mt-0.5">{product.description}</div>
@@ -415,7 +490,7 @@ export default function AdminMenu() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-xs font-bold text-gray-400 uppercase tracking-widest">
+                  <td colSpan={6} className="px-4 py-8 text-center text-xs font-bold text-gray-400 uppercase tracking-widest">
                     Nenhum item encontrado.
                   </td>
                 </tr>

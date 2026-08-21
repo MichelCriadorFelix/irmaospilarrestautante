@@ -31,6 +31,7 @@ export interface Product {
   available: boolean;
   options?: string[]; // e.g., ['batata frita', 'legumes', 'verduras']
   priceOption2?: number; // Price for 2 pieces for meals
+  imageUrl?: string;
 }
 
 export interface CartItem {
